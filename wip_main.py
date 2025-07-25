@@ -756,6 +756,10 @@ class CharacterSheetApp:
         current_spec = self.character.specializations.get(skill, "")
         if current_spec:
             self.skill_spec_combo.set(current_spec)
+        
+        # Also update the rank spinbox to current skill value
+        self.skill_rank_spin.delete(0, tk.END)
+        self.skill_rank_spin.insert(0, str(self.character.skills[skill]))
     
     def update_skill(self):
         selected = self.skill_tree.selection()
@@ -1296,11 +1300,15 @@ class CharacterSheetApp:
         phys_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
         ttk.Label(phys_frame, text="Damage:").pack(anchor=tk.W, padx=5, pady=2)
-        self.phys_damage_label = ttk.Label(phys_frame, text="0", font=("Arial", 10, "bold"))
+        self.phys_damage_label = tk.Label(
+            phys_frame, text="0", 
+            font=("Arial", 10, "bold"),
+            bg="#1c1c1c", fg="white"
+        )
         self.phys_damage_label.pack(anchor=tk.W, padx=5, pady=2)
         
-        self.phys_monitor = tk.Canvas(phys_frame, bg="#333", height=200)
-        self.phys_monitor.pack(fill=tk.X, padx=5, pady=5)
+        self.phys_monitor = tk.Canvas(phys_frame, bg="#1c1c1c", height=200)
+        self.phys_monitor.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.phys_monitor.bind("<Button-1>", self.toggle_physical_damage)
         
         # Stun monitor
@@ -1308,11 +1316,15 @@ class CharacterSheetApp:
         stun_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
         ttk.Label(stun_frame, text="Damage:").pack(anchor=tk.W, padx=5, pady=2)
-        self.stun_damage_label = ttk.Label(stun_frame, text="0", font=("Arial", 10, "bold"))
+        self.stun_damage_label = tk.Label(
+            stun_frame, text="0", 
+            font=("Arial", 10, "bold"),
+            bg="#1c1c1c", fg="white"
+        )
         self.stun_damage_label.pack(anchor=tk.W, padx=5, pady=2)
         
-        self.stun_monitor = tk.Canvas(stun_frame, bg="#333", height=200)
-        self.stun_monitor.pack(fill=tk.X, padx=5, pady=5)
+        self.stun_monitor = tk.Canvas(stun_frame, bg="#1c1c1c", height=200)
+        self.stun_monitor.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.stun_monitor.bind("<Button-1>", self.toggle_stun_damage)
         
         # Dice roller
@@ -1375,6 +1387,174 @@ class CharacterSheetApp:
             value_label.grid(row=i, column=1, sticky=tk.W, padx=5, pady=2)
             setattr(self, f"{attr}_label", value_label)
     
+    def get_damage_status(self, damage, total_boxes):
+        """Return status and color based on damage level"""
+        if damage == 0:
+            return "Healthy", "#4CAF50"  # Green
+        elif damage <= total_boxes // 3:
+            return "Light", "#FFEB3B"    # Yellow
+        elif damage <= 2 * total_boxes // 3:
+            return "Moderate", "#FF9800" # Orange
+        else:
+            return "Serious", "#F44336"  # Red
+    
+    def draw_condition_monitors(self):
+        # Update damage labels with status indicators
+        phys_status, phys_color = self.get_damage_status(
+            self.character.physical_damage, 
+            self.character.physical_boxes
+        )
+        stun_status, stun_color = self.get_damage_status(
+            self.character.stun_damage, 
+            self.character.stun_boxes
+        )
+        
+        self.phys_damage_label.config(
+            text=f"{self.character.physical_damage}/{self.character.physical_boxes} ({phys_status})",
+            fg=phys_color
+        )
+        self.stun_damage_label.config(
+            text=f"{self.character.stun_damage}/{self.character.stun_boxes} ({stun_status})",
+            fg=stun_color
+        )
+        
+        # Draw physical monitor
+        self.draw_single_monitor(
+            self.phys_monitor, 
+            self.character.physical_boxes,
+            self.character.physical_damage,
+            "#FF5252",  # Light red
+            "Physical Condition"
+        )
+        
+        # Draw stun monitor
+        self.draw_single_monitor(
+            self.stun_monitor, 
+            self.character.stun_boxes,
+            self.character.stun_damage,
+            "#FFC107",  # Amber color
+            "Stun Condition"
+        )
+    
+    def draw_single_monitor(self, canvas, total_boxes, damage, damage_color, title):
+        canvas.delete("all")
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        
+        # Calculate box size based on available space
+        boxes_per_row = min(5, max(3, width // 35))
+        box_size = min(30, (width - 20) // boxes_per_row)
+        spacing = 5
+        
+        # Calculate rows needed
+        rows = (total_boxes + boxes_per_row - 1) // boxes_per_row
+        
+        # Draw title
+        canvas.create_text(
+            10, 10, 
+            text=title, 
+            anchor=tk.W, 
+            fill="#e0e0e0",
+            font=("Arial", 10, "bold")
+        )
+        
+        # Draw boxes
+        for i in range(total_boxes):
+            row = i // boxes_per_row
+            col = i % boxes_per_row
+            
+            x1 = 10 + col * (box_size + spacing)
+            y1 = 40 + row * (box_size + spacing)
+            x2 = x1 + box_size
+            y2 = y1 + box_size
+            
+            # Determine box color
+            if i < damage:
+                fill_color = damage_color
+            else:
+                fill_color = "#444"  # Undamaged
+                
+            # Draw box
+            canvas.create_rectangle(x1, y1, x2, y2, fill=fill_color, outline="#666")
+            
+            # Add number if space allows
+            if box_size > 15:
+                canvas.create_text(
+                    (x1+x2)/2, (y1+y2)/2,
+                    text=str(i+1),
+                    fill="white" if i < damage else "#aaa"
+                )
+        
+        # Draw thresholds
+        thresholds = [
+            (total_boxes // 3, "Light", "#FFEB3B"),
+            (2 * total_boxes // 3, "Moderate", "#FF9800"),
+            (total_boxes, "Serious", "#F44336")
+        ]
+        
+        for threshold, label, color in thresholds:
+            if threshold < total_boxes:
+                row = threshold // boxes_per_row
+                y_pos = 40 + row * (box_size + spacing) - 2
+                
+                canvas.create_line(
+                    5, y_pos, width-5, y_pos, 
+                    fill=color, dash=(4, 2), width=2
+                )
+                canvas.create_text(
+                    width-5, y_pos-10, 
+                    text=f"{label} ({threshold})", 
+                    anchor=tk.E, 
+                    fill=color,
+                    font=("Arial", 8)
+                )
+    
+    def toggle_physical_damage(self, event):
+        box_size = 30
+        spacing = 5
+        boxes_per_row = min(5, max(3, self.phys_monitor.winfo_width() // 35))
+        
+        x = event.x
+        y = event.y
+        
+        # Calculate which box was clicked
+        row = (y - 40) // (box_size + spacing)
+        col = (x - 10) // (box_size + spacing)
+        box_index = row * boxes_per_row + col
+        
+        if box_index >= 0 and box_index < self.character.physical_boxes:
+            if box_index < self.character.physical_damage:
+                # Remove damage
+                self.character.physical_damage -= 1
+            else:
+                # Add damage
+                self.character.physical_damage += 1
+                
+            self.draw_condition_monitors()
+    
+    def toggle_stun_damage(self, event):
+        box_size = 30
+        spacing = 5
+        boxes_per_row = min(5, max(3, self.stun_monitor.winfo_width() // 35))
+        
+        x = event.x
+        y = event.y
+        
+        # Calculate which box was clicked
+        row = (y - 40) // (box_size + spacing)
+        col = (x - 10) // (box_size + spacing)
+        box_index = row * boxes_per_row + col
+        
+        if box_index >= 0 and box_index < self.character.stun_boxes:
+            if box_index < self.character.stun_damage:
+                # Remove damage
+                self.character.stun_damage -= 1
+            else:
+                # Add damage
+                self.character.stun_damage += 1
+                
+            self.draw_condition_monitors()
+    
     def update_dice_pool_options(self):
         """Update dice pool options based on character skills and attributes"""
         options = []
@@ -1394,52 +1574,6 @@ class CharacterSheetApp:
         self.dice_pool_combo["values"] = options
         if options:
             self.dice_pool_combo.set(options[0])
-    
-    def toggle_physical_damage(self, event):
-        box_size = 30
-        spacing = 5
-        boxes_per_row = 3
-        
-        x = event.x
-        y = event.y
-        
-        # Calculate which box was clicked
-        row = y // (box_size + spacing)
-        col = x // (box_size + spacing)
-        box_index = row * boxes_per_row + col
-        
-        if box_index < self.character.physical_boxes:
-            if box_index < self.character.physical_damage:
-                # Remove damage
-                self.character.physical_damage -= 1
-            else:
-                # Add damage
-                self.character.physical_damage += 1
-                
-            self.draw_condition_monitors()
-    
-    def toggle_stun_damage(self, event):
-        box_size = 30
-        spacing = 5
-        boxes_per_row = 3
-        
-        x = event.x
-        y = event.y
-        
-        # Calculate which box was clicked
-        row = y // (box_size + spacing)
-        col = x // (box_size + spacing)
-        box_index = row * boxes_per_row + col
-        
-        if box_index < self.character.stun_boxes:
-            if box_index < self.character.stun_damage:
-                # Remove damage
-                self.character.stun_damage -= 1
-            else:
-                # Add damage
-                self.character.stun_damage += 1
-                
-            self.draw_condition_monitors()
     
     def roll_dice(self):
         # Update edge max value
@@ -1491,107 +1625,6 @@ class CharacterSheetApp:
             self.result_text.insert(tk.END, "FAILURE", "critical")
         
         self.result_text.config(state=tk.DISABLED)
-    
-    def draw_condition_monitors(self):
-        # Update damage labels
-        self.phys_damage_label.config(text=str(self.character.physical_damage))
-        self.stun_damage_label.config(text=str(self.character.stun_damage))
-        
-        # Draw physical monitor
-        self.phys_monitor.delete("all")
-        boxes = self.character.physical_boxes
-        rows = (boxes + 2) // 3  # 3 boxes per row
-        
-        width = self.phys_monitor.winfo_width() - 20
-        box_size = min(30, (width - 10) // 3)
-        spacing = 5
-        
-        # Calculate thresholds
-        light_threshold = boxes // 3
-        moderate_threshold = 2 * boxes // 3
-        serious_threshold = boxes
-        
-        for i in range(rows):
-            for j in range(3):
-                box_index = i * 3 + j
-                if box_index < boxes:
-                    x1 = 10 + j * (box_size + spacing)
-                    y1 = 10 + i * (box_size + spacing)
-                    x2 = x1 + box_size
-                    y2 = y1 + box_size
-                    
-                    # Fill box if damaged
-                    if box_index < self.character.physical_damage:
-                        fill_color = "#FF5252"  # Light red
-                    else:
-                        fill_color = "#444"
-                        
-                    self.phys_monitor.create_rectangle(x1, y1, x2, y2, fill=fill_color, outline="#666")
-        
-        # Draw threshold lines and labels
-        for i, (label, threshold) in enumerate([
-            ("Light", light_threshold),
-            ("Moderate", moderate_threshold),
-            ("Serious", serious_threshold)
-        ]):
-            if threshold < boxes:
-                row = threshold // 3
-                y_pos = 10 + row * (box_size + spacing) + box_size + 2
-                self.phys_monitor.create_line(0, y_pos, width, y_pos, fill="#888", dash=(4, 2))
-                self.phys_monitor.create_text(
-                    5, y_pos - 10, 
-                    text=f"{label} ({threshold})", 
-                    anchor=tk.W, 
-                    fill="#ccc",
-                    font=("Arial", 8)
-                )
-        
-        # Draw stun monitor
-        self.stun_monitor.delete("all")
-        boxes = self.character.stun_boxes
-        
-        width = self.stun_monitor.winfo_width() - 20
-        box_size = min(30, (width - 10) // 3)
-        
-        # Calculate thresholds
-        light_threshold = boxes // 3
-        moderate_threshold = 2 * boxes // 3
-        serious_threshold = boxes
-        
-        for i in range(rows):
-            for j in range(3):
-                box_index = i * 3 + j
-                if box_index < boxes:
-                    x1 = 10 + j * (box_size + spacing)
-                    y1 = 10 + i * (box_size + spacing)
-                    x2 = x1 + box_size
-                    y2 = y1 + box_size
-                    
-                    # Fill box if damaged
-                    if box_index < self.character.stun_damage:
-                        fill_color = "#FFC107"  # Amber
-                    else:
-                        fill_color = "#444"
-                        
-                    self.stun_monitor.create_rectangle(x1, y1, x2, y2, fill=fill_color, outline="#666")
-        
-        # Draw threshold lines and labels
-        for i, (label, threshold) in enumerate([
-            ("Light", light_threshold),
-            ("Moderate", moderate_threshold),
-            ("Serious", serious_threshold)
-        ]):
-            if threshold < boxes:
-                row = threshold // 3
-                y_pos = 10 + row * (box_size + spacing) + box_size + 2
-                self.stun_monitor.create_line(0, y_pos, width, y_pos, fill="#888", dash=(4, 2))
-                self.stun_monitor.create_text(
-                    5, y_pos - 10, 
-                    text=f"{label} ({threshold})", 
-                    anchor=tk.W, 
-                    fill="#ccc",
-                    font=("Arial", 8)
-                )
     
     def update_all_fields(self):
         # Basic Info
