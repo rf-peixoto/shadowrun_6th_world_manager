@@ -403,9 +403,14 @@ class EditGearDialog(tk.Toplevel):
         for line in text.splitlines():
             if ":" in line:
                 key, value = line.split(":", 1)
-                attributes[key.strip()] = value.strip()
+                key = key.strip()
+                value = value.strip()
+                if key:  # Only add if key is not empty
+                    attributes[key] = value
         
-        self.result = {"name": name, "description": description, **attributes}
+        # Create result with all attributes
+        self.result = {"name": name, "description": description}
+        self.result.update(attributes)
         self.destroy()
 
 class EditContactDialog(tk.Toplevel):
@@ -645,28 +650,29 @@ class CharacterSheetApp:
         self.attribute_vars = {}
         self.attribute_entries = {}
         
+        # Use a grid layout with 4 columns per row
         for i, attr in enumerate(ShadowrunCharacter.ATTRIBUTES):
-            row = i // 3
-            col = (i % 3) * 2
+            row = i // 4
+            col = (i % 4) * 2
             
             ttk.Label(frame, text=f"{attr}:").grid(row=row, column=col, sticky=tk.W, padx=5, pady=2)
             
             var = tk.IntVar()
             entry = ttk.Spinbox(frame, from_=1, to=10, width=3, textvariable=var)
-            entry.grid(row=row, column=col+1, padx=5, pady=2)
+            entry.grid(row=row, column=col+1, padx=(0, 15), pady=2)  # Add right padding
             entry.bind("<FocusOut>", self.update_derived_stats)
             
             self.attribute_vars[attr] = var
             self.attribute_entries[attr] = entry
             
-            # Add label for metatype bonus
+            # Add label for metatype bonus - place in next column with spacing
             bonus_label = ttk.Label(frame, text="", foreground="#4F9BFF")
-            bonus_label.grid(row=row, column=col+2, padx=5, pady=2)
+            bonus_label.grid(row=row, column=col+2, padx=(0, 10), pady=2)
             setattr(self, f"{attr.lower()}_bonus_label", bonus_label)
         
         # Auto Roll button
         ttk.Button(frame, text="Auto Roll Attributes", command=self.autoroll_attributes).grid(
-            row=8, column=0, columnspan=3, pady=10
+            row=row+1, column=0, columnspan=8, pady=10
         )
     
     def autoroll_attributes(self):
@@ -906,11 +912,12 @@ class CharacterSheetApp:
             self.character.add_gear(category, dialog.result)
             tree = getattr(self, f"{category.lower()}_tree")
             
-            # Format details for display
-            details = dialog.result.get("description", "")
-            if "attributes" in dialog.result:
-                details += " | " + ", ".join([f"{k}: {v}" for k, v in dialog.result.items() 
-                                            if k not in ["name", "description"]])
+            # Format details for display - show attributes only
+            attrs = []
+            for key, value in dialog.result.items():
+                if key not in ["name", "description"]:
+                    attrs.append(f"{key}: {value}")
+            details = "; ".join(attrs)
             tree.insert("", "end", text=dialog.result["name"], values=(details,))
     
     def edit_gear_item(self, category):
@@ -930,11 +937,12 @@ class CharacterSheetApp:
         if dialog.result:
             self.character.update_gear(category, item_index, dialog.result)
             
-            # Update tree view
-            details = dialog.result.get("description", "")
-            if "attributes" in dialog.result:
-                details += " | " + ", ".join([f"{k}: {v}" for k, v in dialog.result.items() 
-                                            if k not in ["name", "description"]])
+            # Update tree view - show attributes only
+            attrs = []
+            for key, value in dialog.result.items():
+                if key not in ["name", "description"]:
+                    attrs.append(f"{key}: {value}")
+            details = "; ".join(attrs)
             tree.item(item_id, text=dialog.result["name"], values=(details,))
     
     def remove_gear_item(self, category):
@@ -1047,8 +1055,14 @@ class CharacterSheetApp:
         
         if dialog.result:
             self.character.spells.append(dialog.result)
+            # Show attributes only in the description column
+            attrs = []
+            for key, value in dialog.result.items():
+                if key not in ["name", "description"]:
+                    attrs.append(f"{key}: {value}")
+            details = "; ".join(attrs)
             self.spell_tree.insert("", "end", text=dialog.result["name"], 
-                                  values=(dialog.result.get("description", ""),))
+                                  values=(details,))
     
     def edit_spell(self, event):
         selected = self.spell_tree.selection()
@@ -1064,8 +1078,14 @@ class CharacterSheetApp:
         
         if dialog.result:
             self.character.spells[index] = dialog.result
+            # Show attributes only in the description column
+            attrs = []
+            for key, value in dialog.result.items():
+                if key not in ["name", "description"]:
+                    attrs.append(f"{key}: {value}")
+            details = "; ".join(attrs)
             self.spell_tree.item(item_id, text=dialog.result["name"], 
-                               values=(dialog.result.get("description", ""),))
+                               values=(details,))
     
     def remove_spell(self):
         selected = self.spell_tree.selection()
@@ -1095,8 +1115,14 @@ class CharacterSheetApp:
         
         if dialog.result:
             self.character.powers.append(dialog.result)
+            # Show attributes only in the description column
+            attrs = []
+            for key, value in dialog.result.items():
+                if key not in ["name", "description"]:
+                    attrs.append(f"{key}: {value}")
+            details = "; ".join(attrs)
             self.power_tree.insert("", "end", text=dialog.result["name"], 
-                                  values=(dialog.result.get("description", ""),))
+                                  values=(details,))
     
     def edit_power(self, event):
         selected = self.power_tree.selection()
@@ -1112,8 +1138,14 @@ class CharacterSheetApp:
         
         if dialog.result:
             self.character.powers[index] = dialog.result
+            # Show attributes only in the description column
+            attrs = []
+            for key, value in dialog.result.items():
+                if key not in ["name", "description"]:
+                    attrs.append(f"{key}: {value}")
+            details = "; ".join(attrs)
             self.power_tree.item(item_id, text=dialog.result["name"], 
-                               values=(dialog.result.get("description", ""),))
+                               values=(details,))
     
     def remove_power(self):
         selected = self.power_tree.selection()
@@ -1143,8 +1175,14 @@ class CharacterSheetApp:
         
         if dialog.result:
             self.character.foci.append(dialog.result)
+            # Show attributes only in the description column
+            attrs = []
+            for key, value in dialog.result.items():
+                if key not in ["name", "description"]:
+                    attrs.append(f"{key}: {value}")
+            details = "; ".join(attrs)
             self.foci_tree.insert("", "end", text=dialog.result["name"], 
-                                 values=(dialog.result.get("description", ""),))
+                                 values=(details,))
     
     def edit_focus(self, event):
         selected = self.foci_tree.selection()
@@ -1160,8 +1198,14 @@ class CharacterSheetApp:
         
         if dialog.result:
             self.character.foci[index] = dialog.result
+            # Show attributes only in the description column
+            attrs = []
+            for key, value in dialog.result.items():
+                if key not in ["name", "description"]:
+                    attrs.append(f"{key}: {value}")
+            details = "; ".join(attrs)
             self.foci_tree.item(item_id, text=dialog.result["name"], 
-                              values=(dialog.result.get("description", ""),))
+                              values=(details,))
     
     def remove_focus(self):
         selected = self.foci_tree.selection()
@@ -1647,12 +1691,19 @@ class CharacterSheetApp:
         for attr in ShadowrunCharacter.ATTRIBUTES:
             self.attribute_vars[attr].set(self.character.base_attributes[attr])
             
-            # Show metatype bonus
+            # Show metatype bonus with color coding
             bonus = self.character.attributes[attr] - self.character.base_attributes[attr]
+            bonus_label = getattr(self, f"{attr.lower()}_bonus_label")
             if bonus != 0:
-                getattr(self, f"{attr.lower()}_bonus_label").config(text=f"+{bonus}")
+                bonus_text = f"+{bonus}" if bonus > 0 else str(bonus)
+                bonus_label.config(text=bonus_text)
+                # Set color to red if negative
+                if bonus < 0:
+                    bonus_label.config(foreground="#FF5252")  # Red for negative
+                else:
+                    bonus_label.config(foreground="#4F9BFF")  # Blue for positive
             else:
-                getattr(self, f"{attr.lower()}_bonus_label").config(text="")
+                bonus_label.config(text="")
         
         # Skills
         for skill in self.skill_tree.get_children():
@@ -1675,28 +1726,47 @@ class CharacterSheetApp:
                 tree.delete(item)
             
             for item in self.character.gear[category]:
-                # Format details for display
-                details = item.get("description", "")
-                if "attributes" in item:
-                    details += " | " + ", ".join([f"{k}: {v}" for k, v in item.items() 
-                                                if k not in ["name", "description"]])
+                # Format attributes for display
+                attrs = []
+                for key, value in item.items():
+                    if key not in ["name", "description"]:
+                        attrs.append(f"{key}: {value}")
+                details = "; ".join(attrs)
                 tree.insert("", "end", text=item.get("name", "Unknown"), values=(details,))
         
         # Magic
         self.spell_tree.delete(*self.spell_tree.get_children())
         for spell in self.character.spells:
+            # Format attributes for display
+            attrs = []
+            for key, value in spell.items():
+                if key not in ["name", "description"]:
+                    attrs.append(f"{key}: {value}")
+            details = "; ".join(attrs)
             self.spell_tree.insert("", "end", text=spell.get("name", ""), 
-                                  values=(spell.get("description", ""),))
+                                  values=(details,))
         
         self.power_tree.delete(*self.power_tree.get_children())
         for power in self.character.powers:
+            # Format attributes for display
+            attrs = []
+            for key, value in power.items():
+                if key not in ["name", "description"]:
+                    attrs.append(f"{key}: {value}")
+            details = "; ".join(attrs)
             self.power_tree.insert("", "end", text=power.get("name", ""), 
-                                  values=(power.get("description", ""),))
+                                  values=(details,))
         
         self.foci_tree.delete(*self.foci_tree.get_children())
         for focus in self.character.foci:
+            # Format attributes for display
+            attrs = []
+            for key, value in focus.items():
+                if key not in ["name", "description"]:
+                    attrs.append(f"{key}: {value}")
+            details = "; ".join(attrs)
             self.foci_tree.insert("", "end", text=focus.get("name", ""), 
-                                 values=(focus.get("description", ""),))
+                                 values=(details,))
         
         # Contacts
         for item in self.contact_tree.get_children():
