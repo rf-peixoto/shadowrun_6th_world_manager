@@ -583,6 +583,7 @@ class EditGearDialog(tk.Toplevel):
         self.result.update(attributes)
         self.destroy()
 
+# Update EditContactDialog class
 class EditContactDialog(tk.Toplevel):
     def __init__(self, parent, contact=None):
         super().__init__(parent)
@@ -605,7 +606,7 @@ class EditContactDialog(tk.Toplevel):
         fields = [
             ("Name:", "name", "entry"),
             ("Type:", "type", "combo"),
-            ("Loyalty:", "loyalty", "spin"),
+            ("Loyalty:", "loyalty", "loyalty_combo"),  # Changed to custom type
             ("Connection:", "connection", "entry"),
             ("Notes:", "notes", "text")
         ]
@@ -620,6 +621,12 @@ class EditContactDialog(tk.Toplevel):
                 entry.grid(row=i, column=1, sticky=tk.W, padx=5, pady=5)
                 if self.contact.get(key):
                     entry.insert(tk.END, self.contact[key])
+            elif field_type == "loyalty_combo":  # Custom field type for loyalty
+                entry = ttk.Combobox(main_frame, width=27)
+                entry["values"] = ShadowrunCharacter.LOYALTY_LEVELS
+                entry.grid(row=i, column=1, sticky=tk.W, padx=5, pady=5)
+                if self.contact.get(key):
+                    entry.set(self.contact[key])
             elif field_type == "combo":
                 entry = ttk.Combobox(main_frame, width=27)
                 if key == "type":
@@ -646,6 +653,7 @@ class EditContactDialog(tk.Toplevel):
         
         ttk.Button(btn_frame, text="Save", command=self.save).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side=tk.LEFT, padx=5)
+    
     
     def save(self):
         result = {}
