@@ -137,6 +137,7 @@ class ShadowrunCharacter:
         self.tradition = ""
         self.mentor_spirit = ""
         self.initiation_grade = 0
+        self.age = 25  # New age field
         
         # Attributes
         self.attributes = {attr: 1 for attr in self.ATTRIBUTES}
@@ -391,6 +392,7 @@ class ShadowrunCharacter:
             "tradition": self.tradition,
             "mentor_spirit": self.mentor_spirit,
             "initiation_grade": self.initiation_grade,
+            "age": self.age,
             "attributes": self.attributes,
             "base_attributes": self.base_attributes,
             "skills": self.skills,
@@ -739,7 +741,7 @@ class CharacterSheetApp:
         # Create tabs
         self.tabs = {}
         tab_names = ["Basic Info", "Skills", "Qualities", "Gear", 
-                    "Magic/Resonance", "Contacts", "Background", "Combat Stats"]
+                    "Magic/Resonance", "Contacts", "Background", "Combat Stats", "Wiki"]  # Added Wiki tab
         
         for name in tab_names:
             tab = ttk.Frame(self.notebook)
@@ -755,6 +757,7 @@ class CharacterSheetApp:
         self.setup_contacts_tab()
         self.setup_background_tab()
         self.setup_combat_stats_tab()
+        self.setup_wiki_tab()  # New wiki tab
         
         # Load default character
         self.update_all_fields()
@@ -1507,6 +1510,17 @@ class CharacterSheetApp:
     def setup_background_tab(self):
         tab = self.tabs["Background"]
         
+        # Age field
+        age_frame = ttk.Frame(tab)
+        age_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(age_frame, text="Age:").pack(side=tk.LEFT, padx=5)
+        self.age_spin = ttk.Spinbox(age_frame, from_=0, to=200, width=5)
+        self.age_spin.pack(side=tk.LEFT, padx=5)
+        self.age_spin.set(self.character.age)
+        self.age_spin.bind("<FocusOut>", self.update_derived_stats)
+        
+        # Background text
         frame = ttk.LabelFrame(tab, text="Character Background")
         frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
@@ -1514,6 +1528,88 @@ class CharacterSheetApp:
                                                         bg="#333", fg="#e0e0e0", insertbackground="white")
         self.background_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.background_text.bind("<FocusOut>", self.update_derived_stats)
+    
+    def setup_wiki_tab(self):
+        tab = self.tabs["Wiki"]
+        
+        # Create paned window for resizable panels
+        paned_window = ttk.PanedWindow(tab, orient=tk.HORIZONTAL)
+        paned_window.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Left panel - tree view with categories
+        tree_frame = ttk.Frame(paned_window, width=200)
+        paned_window.add(tree_frame, weight=1)
+        
+        # Wiki tree view
+        self.wiki_tree = ttk.Treeview(tree_frame, show="tree")
+        self.wiki_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Populate wiki tree with categories
+        categories = {
+            "Gear": ["Weapons", "Armor", "Cyberware", "Bioware", "Electronics", "Medkits"],
+            "Magic": ["Spells", "Powers", "Foci", "Traditions"],
+            "Rules": ["Combat", "Magic System", "Hacking", "Vehicles"]
+        }
+        
+        for category, subcategories in categories.items():
+            parent = self.wiki_tree.insert("", "end", text=category, open=True)
+            for sub in subcategories:
+                self.wiki_tree.insert(parent, "end", text=sub)
+        
+        # Right panel - content display
+        content_frame = ttk.Frame(paned_window)
+        paned_window.add(content_frame, weight=3)
+        
+        # Wiki content display
+        self.wiki_content = scrolledtext.ScrolledText(
+            content_frame, wrap=tk.WORD, bg="#333", fg="#e0e0e0", 
+            font=("Arial", 10), state=tk.DISABLED
+        )
+        self.wiki_content.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Bind tree selection to content display
+        self.wiki_tree.bind("<<TreeviewSelect>>", self.display_wiki_content)
+    
+    def display_wiki_content(self, event):
+        selected = self.wiki_tree.selection()
+        if not selected:
+            return
+            
+        item = self.wiki_tree.item(selected[0])
+        category = item["text"]
+        
+        # Wiki content data
+        wiki_data = {
+            "Weapons": "**Common Weapons**\n\n- Pistols (DV 2P, ACC 5)\n- Assault Rifles (DV 4P, ACC 6)\n- Sniper Rifles (DV 5P, ACC 7)\n- Shotguns (DV 4P, ACC 4)\n\n**Special Rules**\n- Recoil affects burst fire\n- Smartgun systems add +2 ACC",
+            "Armor": "**Armor Types**\n\n- Armor Jacket (Rating 4)\n- Full Body Armor (Rating 6)\n- Helmet (Rating +2)\n- Shield (Rating +3)\n\n**Special Rules**\n- Stacking armor has diminishing returns",
+            "Cyberware": "**Common Cyberware**\n\n- Datajack (0.2 Essence)\n- Cybereyes (0.4 Essence)\n- Cyberarms (1.0 Essence)\n- Wired Reflexes (Rating 1-3, Essence cost varies)\n\n**Essence Cost**\n- Cyberware reduces essence permanently",
+            "Bioware": "**Common Bioware**\n\n- Muscle Augmentation (+1 Strength)\n- Synaptic Booster (+1 Reaction)\n- Tailored Pheromones (+1 Charisma)\n\n**Essence Cost**\n- Bioware has lower essence cost than cyberware",
+            "Electronics": "**Common Electronics**\n\n- Commlink (Rating 1-6)\n- Cyberdeck (Hacking device)\n- Medkit (Rating 1-6)\n\n**Special Rules**\n- Device rating affects functionality",
+            "Medkits": "**Medkit Ratings**\n\n- Rating 1: +1 to First Aid tests\n- Rating 3: +3 to First Aid tests\n- Rating 6: +6 to First Aid tests\n\n**Usage**\n- Each use consumes one charge",
+            "Spells": "**Spell Types**\n\n- Combat Spells (Direct damage)\n- Health Spells (Healing)\n- Illusion Spells (Deception)\n- Manipulation Spells (Control)\n\n**Drain**\n- Casting causes drain damage to caster",
+            "Powers": "**Adept Powers**\n\n- Improved Reflexes (+Initiative dice)\n- Combat Sense (+Defense)\n- Killing Hands (Unarmed combat boost)\n\n**Activation**\n- Powers are always active or require simple action",
+            "Foci": "**Focus Types**\n\n- Weapon Focus (Enhances specific weapon)\n- Power Focus (Boosts magic rating)\n- Spell Focus (Enhances specific spell)\n\n**Binding**\n- Foci must be bound with karma",
+            "Traditions": "**Magic Traditions**\n\n- Hermetic (Logic-based)\n- Shamanic (Charisma-based)\n- Christian Theurgy (Willpower-based)\n- Buddhist (Intuition-based)\n\n**Drain Resistance**\n- Tradition determines drain resistance attribute",
+            "Combat": "**Combat Sequence**\n1. Roll initiative\n2. Characters act in initiative order\n3. Repeat for each combat turn\n\n**Actions**\n- Simple Action (1 per turn)\n- Complex Action (1 per turn)\n- Free Action (multiple)",
+            "Magic System": "**Magic Rules**\n- Magic Rating determines spell power\n- Drain is physical/stun damage from spellcasting\n- Counterspelling defends against magic\n- Sustaining spells causes penalty",
+            "Hacking": "**Matrix Actions**\n- Brute Force (attack)\n- Hack on the Fly (stealth)\n- Matrix Perception (detection)\n\n**Devices**\n- All devices have device rating (1-6)",
+            "Vehicles": "**Vehicle Combat**\n- Piloting tests for maneuvers\n- Vehicle stats: Handling, Speed, Accel\n\n**Rigging**\n- Riggers can jump into vehicles directly"
+        }
+        
+        content = wiki_data.get(category, "No information available for this topic.")
+        
+        # Format as markdown-like text
+        formatted_content = ""
+        for line in content.split('\n'):
+            if line.startswith('**'):
+                formatted_content += "\n" + line + "\n"
+            else:
+                formatted_content += line + "\n"
+        
+        self.wiki_content.config(state=tk.NORMAL)
+        self.wiki_content.delete(1.0, tk.END)
+        self.wiki_content.insert(tk.END, f"=== {category} ===\n\n{formatted_content}")
+        self.wiki_content.config(state=tk.DISABLED)
     
     def setup_combat_stats_tab(self):
         tab = self.tabs["Combat Stats"]
@@ -1607,7 +1703,7 @@ class CharacterSheetApp:
         edge_action_frame.pack(fill=tk.X, padx=10, pady=5)
         
         ttk.Label(edge_action_frame, text="Edge Action:").pack(side=tk.LEFT, padx=5)
-        self.edge_action_combo = ttk.Combobox(edge_action_frame, values=list(ShadowrunCharacter.EDGE_ACTIONS.keys()), width=30)
+        self.edge_action_combo = ttk.Combobox(edge_action_frame, values=["None"] + list(ShadowrunCharacter.EDGE_ACTIONS.keys()), width=30)
         self.edge_action_combo.pack(side=tk.LEFT, padx=5)
         self.edge_action_combo.set("None")
         
@@ -1853,6 +1949,10 @@ class CharacterSheetApp:
         for focus in self.character.foci:
             options.append(f"Focus: {focus.get('name', '')}")
         
+        # Add weapons
+        for weapon in self.character.gear["Weapons"]:
+            options.append(f"Weapon: {weapon.get('name', '')}")
+        
         self.dice_pool_combo["values"] = options
         if options:
             self.dice_pool_combo.set(options[0])
@@ -1869,12 +1969,10 @@ class CharacterSheetApp:
             
             # Check if character has enough edge
             if self.character.current_edge < edge_cost:
-                messagebox.showwarning("Not Enough Edge", f"Not enough Edge points for {edge_action_name}!")
-                return
-                
-            # Deduct edge cost
-            self.character.current_edge -= edge_cost
-            self.edge_label.config(text=str(self.character.current_edge))
+                # Instead of blocking, fall back to no edge action
+                edge_action = None
+                messagebox.showwarning("Not Enough Edge", 
+                                      f"Not enough Edge points for {edge_action_name}! Rolling without edge action.")
         
         try:
             # Parse dice pool from combo selection
@@ -2041,6 +2139,8 @@ class CharacterSheetApp:
         self.karma_spin.insert(0, str(self.character.karma))
         self.nuyen_entry.delete(0, tk.END)
         self.nuyen_entry.insert(0, str(self.character.nuyen))
+        self.age_spin.delete(0, tk.END)
+        self.age_spin.insert(0, str(self.character.age))
         
         # Attributes
         for attr in ShadowrunCharacter.ATTRIBUTES:
@@ -2142,6 +2242,7 @@ class CharacterSheetApp:
         self.character.karma = int(self.karma_spin.get() or "0")
         self.character.nuyen = int(self.nuyen_entry.get() or "0")
         self.character.background = self.background_text.get(1.0, tk.END).strip()
+        self.character.age = int(self.age_spin.get() or "25")
         
         for attr in ShadowrunCharacter.ATTRIBUTES:
             try:
