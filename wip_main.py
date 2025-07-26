@@ -60,7 +60,7 @@ class ShadowrunCharacter:
     }
     
     # Define magical traditions
-    TRADITIONS = ["Hermetic", "Shamanic", "Christian Theurgy", "Buddhist", "Islamic", "Voodoo"]
+    TRADITIONS = ["None", "Hermetic", "Shamanic", "Christian Theurgy", "Buddhist", "Islamic", "Voodoo"]
     
     QUALITIES = {
         "Positive": ["Adept", "Ambidextrous", "Analytical Mind", "Astral Chameleon", 
@@ -146,15 +146,16 @@ class ShadowrunCharacter:
         self.contacts = []
         
         # Spells/Powers
-        self.spells = []  # Now stored as dictionaries: {"name": "", "description": ""}
-        self.powers = []  # Now stored as dictionaries: {"name": "", "description": ""}
+        self.spells = []  # Now stored as dictionaries: {"name": "", "description": "", "type": "", "drain": 0}
+        self.powers = []  # Now stored as dictionaries: {"name": "", "description": "", "activation": "", "effect": ""}
         self.complex_forms = []
-        self.foci = []    # Now stored as dictionaries: {"name": "", "description": ""}
+        self.foci = []    # Now stored as dictionaries: {"name": "", "description": "", "type": "", "force": 0}
         
         # Combat stats
         self.calculate_derived_stats()
         self.physical_damage = 0
         self.stun_damage = 0
+        self.initiative_passed = 0
     
     def calculate_derived_stats(self):
         # Reset attributes to base before applying bonuses
@@ -229,6 +230,25 @@ class ShadowrunCharacter:
                 essence_cost += float(item["Essence Cost"])
         self.attributes["Essence"] = max(0, 6.0 - essence_cost)
         
+        # Reset armor bonuses
+        self.attributes["Armor"] = 0
+        
+        # Apply armor bonuses
+        for item in self.gear["Armor"]:
+            if "Rating" in item:
+                try:
+                    self.attributes["Armor"] += int(item["Rating"])
+                except ValueError:
+                    pass
+        
+        # Apply weapon bonuses
+        for item in self.gear["Weapons"]:
+            if "Accuracy" in item:
+                try:
+                    self.attributes["Weapon Accuracy"] = max(self.attributes.get("Weapon Accuracy", 0), int(item["Accuracy"]))
+                except ValueError:
+                    pass
+        
         # Recalculate derived stats
         self.calculate_derived_stats()
     
@@ -264,6 +284,33 @@ class ShadowrunCharacter:
             "glitch": glitch,
             "critical_glitch": critical_glitch
         }
+    
+    def roll_initiative(self):
+        """Roll initiative dice and return result"""
+        base_score = self.attributes["Reaction"] + self.attributes["Intuition"]
+        dice_rolls = [random.randint(1, 6) for _ in range(self.initiative_dice)]
+        return base_score + sum(dice_rolls), dice_rolls
+    
+    def heal_damage(self, damage_type, amount):
+        """Heal physical or stun damage"""
+        if damage_type == "physical":
+            self.physical_damage = max(0, self.physical_damage - amount)
+        elif damage_type == "stun":
+            self.stun_damage = max(0, self.stun_damage - amount)
+    
+    def use_medkit(self):
+        """Use a medkit to heal damage if available"""
+        for item in self.gear["Bioware"] + self.gear["Electronics"] + self.gear["Other"]:
+            if "Medkit" in item.get("name", ""):
+                rating = item.get("Rating", 1)
+                self.heal_damage("physical", rating * 2)
+                self.heal_damage("stun", rating)
+                return True
+        return False
+    
+    def rest(self):
+        """Rest to recover stun damage"""
+        self.heal_damage("stun", 1)
     
     def to_dict(self):
         return {
@@ -337,6 +384,16 @@ class DescriptionViewer(tk.Toplevel):
         ttk.Button(btn_frame, text="Close", command=self.destroy).pack()
 
 class EditGearDialog(tk.Toplevel):
+    GEAR_ATTRIBUTES = {
+        "Weapons": ["Damage", "Accuracy", "AP", "Mode", "RC", "Ammo"],
+        "Armor": ["Rating", "Social", "Capacity"],
+        "Cyberware": ["Essence Cost", "Capacity", "Rating"],
+        "Bioware": ["Essence Cost", "Rating", "Capacity"],
+        "Magic Items": ["Force", "Type", "Binding"],
+        "Electronics": ["Rating", "Capacity", "Function"],
+        "Other": ["Effect", "Duration", "Potency"]
+    }
+    
     def __init__(self, parent, category, item=None):
         super().__init__(parent)
         self.parent = parent
@@ -345,7 +402,7 @@ class EditGearDialog(tk.Toplevel):
         self.result = None
         
         self.title(f"Edit {category}")
-        self.geometry("400x400")
+        self.geometry("400x500")
         self.configure(bg="#1c1c1c")
         self.resizable(True, True)
         
@@ -369,21 +426,35 @@ class EditGearDialog(tk.Toplevel):
         self.desc_text.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
         self.desc_text.insert(tk.END, self.item.get("description", ""))
         
-        # Attributes
-        ttk.Label(main_frame, text="Attributes:").grid(row=2, column=0, sticky=tk.NW, padx=5, pady=5)
-        self.attr_text = scrolledtext.ScrolledText(main_frame, width=30, height=6, 
-                                                  bg="#333", fg="#e0e0e0", insertbackground="white")
-        self.attr_text.grid(row=2, column=1, sticky=tk.W, padx=5, pady=5)
+        # Standard attributes for category
+        row = 2
+        self.attr_entries = {}
+        for attr in self.GEAR_ATTRIBUTES.get(self.category, []):
+            ttk.Label(main_frame, text=f"{attr}:").grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+            entry = ttk.Entry(main_frame, width=15)
+            entry.grid(row=row, column=1, sticky=tk.W, padx=5, pady=2)
+            entry.insert(0, str(self.item.get(attr, "")))
+            self.attr_entries[attr] = entry
+            row += 1
         
-        # Load existing attributes
+        # Custom attributes
+        ttk.Label(main_frame, text="Custom Attributes:").grid(row=row, column=0, sticky=tk.NW, padx=5, pady=5)
+        self.attr_text = scrolledtext.ScrolledText(main_frame, width=30, height=4, 
+                                                  bg="#333", fg="#e0e0e0", insertbackground="white")
+        self.attr_text.grid(row=row, column=1, sticky=tk.W, padx=5, pady=5)
+        row += 1
+        
+        # Load existing custom attributes
         if self.item:
+            custom_attrs = []
             for key, value in self.item.items():
-                if key not in ["name", "description"]:
-                    self.attr_text.insert(tk.END, f"{key}: {value}\n")
+                if key not in ["name", "description"] and key not in self.GEAR_ATTRIBUTES.get(self.category, []):
+                    custom_attrs.append(f"{key}: {value}")
+            self.attr_text.insert(tk.END, "\n".join(custom_attrs))
         
         # Buttons
         btn_frame = ttk.Frame(main_frame)
-        btn_frame.grid(row=3, column=0, columnspan=2, pady=10)
+        btn_frame.grid(row=row, column=0, columnspan=2, pady=10)
         
         ttk.Button(btn_frame, text="Save", command=self.save).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side=tk.LEFT, padx=5)
@@ -397,8 +468,14 @@ class EditGearDialog(tk.Toplevel):
         # Get description
         description = self.desc_text.get("1.0", tk.END).strip()
         
-        # Parse attributes
+        # Get standard attributes
         attributes = {}
+        for attr, entry in self.attr_entries.items():
+            value = entry.get().strip()
+            if value:
+                attributes[attr] = value
+        
+        # Parse custom attributes
         text = self.attr_text.get("1.0", tk.END)
         for line in text.splitlines():
             if ":" in line:
@@ -557,7 +634,7 @@ class CharacterSheetApp:
         
         # Create tabs
         self.tabs = {}
-        tab_names = ["Basic Info", "Attributes", "Skills", "Qualities", "Gear", 
+        tab_names = ["Basic Info", "Skills", "Qualities", "Gear", 
                     "Magic/Resonance", "Contacts", "Background", "Combat Stats"]
         
         for name in tab_names:
@@ -567,7 +644,6 @@ class CharacterSheetApp:
         
         # Set up tabs
         self.setup_basic_info_tab()
-        self.setup_attributes_tab()
         self.setup_skills_tab()
         self.setup_qualities_tab()
         self.setup_gear_tab()
@@ -581,71 +657,66 @@ class CharacterSheetApp:
     
     def setup_basic_info_tab(self):
         tab = self.tabs["Basic Info"]
-        frame = ttk.LabelFrame(tab, text="Character Information")
-        frame.pack(fill=tk.X, padx=10, pady=5)
+        notebook = ttk.Notebook(tab)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Character info frame
+        char_frame = ttk.Frame(notebook)
+        notebook.add(char_frame, text="Character Info")
         
         # Name
-        ttk.Label(frame, text="Name:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
-        self.name_entry = ttk.Entry(frame, width=30)
-        self.name_entry.grid(row=0, column=1, padx=5, pady=2)
+        ttk.Label(char_frame, text="Name:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
+        self.name_entry = ttk.Entry(char_frame, width=30)
+        self.name_entry.grid(row=0, column=1, padx=5, pady=2, sticky=tk.W)
         self.name_entry.bind("<FocusOut>", self.update_derived_stats)
         
         # Metatype
-        ttk.Label(frame, text="Metatype:").grid(row=0, column=2, sticky=tk.W, padx=5, pady=2)
-        self.metatype_combo = ttk.Combobox(frame, values=ShadowrunCharacter.METATYPES, state="readonly", width=15)
-        self.metatype_combo.grid(row=0, column=3, padx=5, pady=2)
+        ttk.Label(char_frame, text="Metatype:").grid(row=0, column=2, sticky=tk.W, padx=5, pady=2)
+        self.metatype_combo = ttk.Combobox(char_frame, values=ShadowrunCharacter.METATYPES, state="readonly", width=15)
+        self.metatype_combo.grid(row=0, column=3, padx=5, pady=2, sticky=tk.W)
         self.metatype_combo.bind("<<ComboboxSelected>>", self.update_derived_stats)
         
         # Role
-        ttk.Label(frame, text="Role:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=2)
-        self.role_combo = ttk.Combobox(frame, values=list(ShadowrunCharacter.ROLES.keys()), state="readonly", width=15)
-        self.role_combo.grid(row=1, column=1, padx=5, pady=2)
+        ttk.Label(char_frame, text="Role:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=2)
+        self.role_combo = ttk.Combobox(char_frame, values=list(ShadowrunCharacter.ROLES.keys()), state="readonly", width=15)
+        self.role_combo.grid(row=1, column=1, padx=5, pady=2, sticky=tk.W)
         self.role_combo.bind("<<ComboboxSelected>>", self.update_derived_stats)
         
         # Magic Type
-        ttk.Label(frame, text="Magic/Resonance:").grid(row=1, column=2, sticky=tk.W, padx=5, pady=2)
-        self.magic_combo = ttk.Combobox(frame, values=ShadowrunCharacter.MAGIC_TYPES, state="readonly", width=15)
-        self.magic_combo.grid(row=1, column=3, padx=5, pady=2)
+        ttk.Label(char_frame, text="Magic/Resonance:").grid(row=1, column=2, sticky=tk.W, padx=5, pady=2)
+        self.magic_combo = ttk.Combobox(char_frame, values=ShadowrunCharacter.MAGIC_TYPES, state="readonly", width=15)
+        self.magic_combo.grid(row=1, column=3, padx=5, pady=2, sticky=tk.W)
         self.magic_combo.bind("<<ComboboxSelected>>", self.update_derived_stats)
         
         # Tradition/Mentor
-        ttk.Label(frame, text="Tradition/Mentor:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
-        self.tradition_combo = ttk.Combobox(frame, values=ShadowrunCharacter.TRADITIONS, state="readonly", width=15)
-        self.tradition_combo.grid(row=2, column=1, padx=5, pady=2)
+        ttk.Label(char_frame, text="Tradition/Mentor:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
+        self.tradition_combo = ttk.Combobox(char_frame, values=ShadowrunCharacter.TRADITIONS, state="readonly", width=15)
+        self.tradition_combo.grid(row=2, column=1, padx=5, pady=2, sticky=tk.W)
         
         # Initiation Grade
-        ttk.Label(frame, text="Initiation Grade:").grid(row=2, column=2, sticky=tk.W, padx=5, pady=2)
-        self.init_grade_spin = ttk.Spinbox(frame, from_=0, to=10, width=5)
-        self.init_grade_spin.grid(row=2, column=3, padx=5, pady=2)
+        ttk.Label(char_frame, text="Initiation Grade:").grid(row=2, column=2, sticky=tk.W, padx=5, pady=2)
+        self.init_grade_spin = ttk.Spinbox(char_frame, from_=0, to=10, width=5)
+        self.init_grade_spin.grid(row=2, column=3, padx=5, pady=2, sticky=tk.W)
         
         # Lifestyle
-        ttk.Label(frame, text="Lifestyle:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=2)
-        self.lifestyle_combo = ttk.Combobox(frame, values=ShadowrunCharacter.LIFESTYLES, state="readonly", width=15)
-        self.lifestyle_combo.grid(row=3, column=1, padx=5, pady=2)
+        ttk.Label(char_frame, text="Lifestyle:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=2)
+        self.lifestyle_combo = ttk.Combobox(char_frame, values=ShadowrunCharacter.LIFESTYLES, state="readonly", width=15)
+        self.lifestyle_combo.grid(row=3, column=1, padx=5, pady=2, sticky=tk.W)
         self.lifestyle_combo.bind("<<ComboboxSelected>>", self.update_lifestyle_nuyen)
         
         # Karma
-        ttk.Label(frame, text="Karma:").grid(row=3, column=2, sticky=tk.W, padx=5, pady=2)
-        self.karma_spin = ttk.Spinbox(frame, from_=0, to=100, width=5)
-        self.karma_spin.grid(row=3, column=3, padx=5, pady=2)
+        ttk.Label(char_frame, text="Karma:").grid(row=3, column=2, sticky=tk.W, padx=5, pady=2)
+        self.karma_spin = ttk.Spinbox(char_frame, from_=0, to=100, width=5)
+        self.karma_spin.grid(row=3, column=3, padx=5, pady=2, sticky=tk.W)
         
         # Nuyen
-        ttk.Label(frame, text="Nuyen:").grid(row=4, column=0, sticky=tk.W, padx=5, pady=2)
-        self.nuyen_entry = ttk.Entry(frame, width=15)
+        ttk.Label(char_frame, text="Nuyen:").grid(row=4, column=0, sticky=tk.W, padx=5, pady=2)
+        self.nuyen_entry = ttk.Entry(char_frame, width=15)
         self.nuyen_entry.grid(row=4, column=1, padx=5, pady=2, sticky=tk.W)
-    
-    def update_lifestyle_nuyen(self, event=None):
-        lifestyle = self.lifestyle_combo.get()
-        if lifestyle:
-            nuyen = ShadowrunCharacter.LIFESTYLE_NUYEN.get(lifestyle, 5000)
-            self.nuyen_entry.delete(0, tk.END)
-            self.nuyen_entry.insert(0, str(nuyen))
-            self.update_derived_stats()
-    
-    def setup_attributes_tab(self):
-        tab = self.tabs["Attributes"]
-        frame = ttk.LabelFrame(tab, text="Attributes")
-        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Attributes frame
+        attr_frame = ttk.Frame(notebook)
+        notebook.add(attr_frame, text="Attributes")
         
         self.attribute_vars = {}
         self.attribute_entries = {}
@@ -655,10 +726,10 @@ class CharacterSheetApp:
             row = i // 4
             col = (i % 4) * 2
             
-            ttk.Label(frame, text=f"{attr}:").grid(row=row, column=col, sticky=tk.W, padx=5, pady=2)
+            ttk.Label(attr_frame, text=f"{attr}:").grid(row=row, column=col, sticky=tk.W, padx=5, pady=2)
             
             var = tk.IntVar()
-            entry = ttk.Spinbox(frame, from_=1, to=10, width=3, textvariable=var)
+            entry = ttk.Spinbox(attr_frame, from_=1, to=10, width=3, textvariable=var)
             entry.grid(row=row, column=col+1, padx=(0, 15), pady=2)  # Add right padding
             entry.bind("<FocusOut>", self.update_derived_stats)
             
@@ -666,12 +737,12 @@ class CharacterSheetApp:
             self.attribute_entries[attr] = entry
             
             # Add label for metatype bonus - place in next column with spacing
-            bonus_label = ttk.Label(frame, text="", foreground="#4F9BFF")
+            bonus_label = ttk.Label(attr_frame, text="", foreground="#4F9BFF")
             bonus_label.grid(row=row, column=col+2, padx=(0, 10), pady=2)
             setattr(self, f"{attr.lower()}_bonus_label", bonus_label)
         
         # Auto Roll button
-        ttk.Button(frame, text="Auto Roll Attributes", command=self.autoroll_attributes).grid(
+        ttk.Button(attr_frame, text="Auto Roll Attributes", command=self.autoroll_attributes).grid(
             row=row+1, column=0, columnspan=8, pady=10
         )
     
@@ -705,6 +776,14 @@ class CharacterSheetApp:
         # Set the attributes
         self.character.base_attributes.update(base_attrs)
         self.update_all_fields()
+    
+    def update_lifestyle_nuyen(self, event=None):
+        lifestyle = self.lifestyle_combo.get()
+        if lifestyle:
+            nuyen = ShadowrunCharacter.LIFESTYLE_NUYEN.get(lifestyle, 5000)
+            self.nuyen_entry.delete(0, tk.END)
+            self.nuyen_entry.insert(0, str(nuyen))
+            self.update_derived_stats()
     
     def setup_skills_tab(self):
         tab = self.tabs["Skills"]
@@ -744,6 +823,15 @@ class CharacterSheetApp:
         self.skill_spec_combo.pack(side=tk.LEFT, padx=2)
         
         ttk.Button(ctrl_frame, text="Update Skill", command=self.update_skill).pack(side=tk.LEFT, padx=5)
+        
+        # Skill description
+        desc_frame = ttk.LabelFrame(left_frame, text="Skill Description")
+        desc_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.skill_desc_text = scrolledtext.ScrolledText(desc_frame, height=5, wrap=tk.WORD,
+                                                        bg="#333", fg="#e0e0e0")
+        self.skill_desc_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.skill_desc_text.config(state=tk.DISABLED)
     
     def update_specialization_list(self, event=None):
         selected = self.skill_tree.selection()
@@ -766,6 +854,14 @@ class CharacterSheetApp:
         # Also update the rank spinbox to current skill value
         self.skill_rank_spin.delete(0, tk.END)
         self.skill_rank_spin.insert(0, str(self.character.skills[skill]))
+        
+        # Update skill description
+        self.skill_desc_text.config(state=tk.NORMAL)
+        self.skill_desc_text.delete(1.0, tk.END)
+        self.skill_desc_text.insert(tk.END, f"Skill: {skill}\n")
+        self.skill_desc_text.insert(tk.END, f"Rank: {self.character.skills[skill]}\n")
+        self.skill_desc_text.insert(tk.END, f"Specialization: {current_spec or 'None'}\n")
+        self.skill_desc_text.config(state=tk.DISABLED)
     
     def update_skill(self):
         selected = self.skill_tree.selection()
@@ -781,6 +877,7 @@ class CharacterSheetApp:
                 del self.character.specializations[skill]
             
             self.skill_tree.item(selected[0], values=(rank, spec))
+            self.update_specialization_list()
     
     def setup_qualities_tab(self):
         tab = self.tabs["Qualities"]
@@ -974,10 +1071,13 @@ class CharacterSheetApp:
         spell_list_frame = ttk.Frame(spells_frame)
         spell_list_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        self.spell_tree = ttk.Treeview(spell_list_frame, columns=("Description"), show="headings", height=10)
+        self.spell_tree = ttk.Treeview(spell_list_frame, columns=("Type", "Drain"), show="headings", height=10)
         self.spell_tree.heading("#0", text="Spell")
         self.spell_tree.column("#0", width=150)
-        self.spell_tree.heading("Description", text="Description")
+        self.spell_tree.heading("Type", text="Type")
+        self.spell_tree.column("Type", width=100)
+        self.spell_tree.heading("Drain", text="Drain")
+        self.spell_tree.column("Drain", width=50)
         self.spell_tree.pack(fill=tk.BOTH, expand=True)
         self.spell_tree.bind("<Double-1>", self.view_spell)
         self.spell_tree.bind("<<TreeviewSelect>>", self.show_spell_description)
@@ -997,10 +1097,13 @@ class CharacterSheetApp:
         power_list_frame = ttk.Frame(powers_frame)
         power_list_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        self.power_tree = ttk.Treeview(power_list_frame, columns=("Description"), show="headings", height=10)
+        self.power_tree = ttk.Treeview(power_list_frame, columns=("Activation", "Effect"), show="headings", height=10)
         self.power_tree.heading("#0", text="Power")
         self.power_tree.column("#0", width=150)
-        self.power_tree.heading("Description", text="Description")
+        self.power_tree.heading("Activation", text="Activation")
+        self.power_tree.column("Activation", width=100)
+        self.power_tree.heading("Effect", text="Effect")
+        self.power_tree.column("Effect", width=100)
         self.power_tree.pack(fill=tk.BOTH, expand=True)
         self.power_tree.bind("<Double-1>", self.view_power)
         self.power_tree.bind("<<TreeviewSelect>>", self.show_power_description)
@@ -1020,10 +1123,13 @@ class CharacterSheetApp:
         foci_list_frame = ttk.Frame(foci_frame)
         foci_list_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        self.foci_tree = ttk.Treeview(foci_list_frame, columns=("Description"), show="headings", height=10)
+        self.foci_tree = ttk.Treeview(foci_list_frame, columns=("Type", "Force"), show="headings", height=10)
         self.foci_tree.heading("#0", text="Focus")
         self.foci_tree.column("#0", width=150)
-        self.foci_tree.heading("Description", text="Description")
+        self.foci_tree.heading("Type", text="Type")
+        self.foci_tree.column("Type", width=100)
+        self.foci_tree.heading("Force", text="Force")
+        self.foci_tree.column("Force", width=50)
         self.foci_tree.pack(fill=tk.BOTH, expand=True)
         self.foci_tree.bind("<Double-1>", self.view_focus)
         self.foci_tree.bind("<<TreeviewSelect>>", self.show_focus_description)
@@ -1041,6 +1147,8 @@ class CharacterSheetApp:
             index = self.spell_tree.index(selected[0])
             spell = self.character.spells[index]
             content = f"Name: {spell.get('name', '')}\n\n"
+            content += f"Type: {spell.get('type', '')}\n"
+            content += f"Drain: {spell.get('drain', '')}\n\n"
             content += f"Description: {spell.get('description', '')}"
             DescriptionViewer(self.root, "Spell Description", content)
     
@@ -1055,14 +1163,8 @@ class CharacterSheetApp:
         
         if dialog.result:
             self.character.spells.append(dialog.result)
-            # Show attributes only in the description column
-            attrs = []
-            for key, value in dialog.result.items():
-                if key not in ["name", "description"]:
-                    attrs.append(f"{key}: {value}")
-            details = "; ".join(attrs)
             self.spell_tree.insert("", "end", text=dialog.result["name"], 
-                                  values=(details,))
+                                  values=(dialog.result.get("type", ""), dialog.result.get("drain", "")))
     
     def edit_spell(self, event):
         selected = self.spell_tree.selection()
@@ -1078,14 +1180,8 @@ class CharacterSheetApp:
         
         if dialog.result:
             self.character.spells[index] = dialog.result
-            # Show attributes only in the description column
-            attrs = []
-            for key, value in dialog.result.items():
-                if key not in ["name", "description"]:
-                    attrs.append(f"{key}: {value}")
-            details = "; ".join(attrs)
             self.spell_tree.item(item_id, text=dialog.result["name"], 
-                               values=(details,))
+                               values=(dialog.result.get("type", ""), dialog.result.get("drain", "")))
     
     def remove_spell(self):
         selected = self.spell_tree.selection()
@@ -1101,6 +1197,8 @@ class CharacterSheetApp:
             index = self.power_tree.index(selected[0])
             power = self.character.powers[index]
             content = f"Name: {power.get('name', '')}\n\n"
+            content += f"Activation: {power.get('activation', '')}\n"
+            content += f"Effect: {power.get('effect', '')}\n\n"
             content += f"Description: {power.get('description', '')}"
             DescriptionViewer(self.root, "Power Description", content)
     
@@ -1115,14 +1213,8 @@ class CharacterSheetApp:
         
         if dialog.result:
             self.character.powers.append(dialog.result)
-            # Show attributes only in the description column
-            attrs = []
-            for key, value in dialog.result.items():
-                if key not in ["name", "description"]:
-                    attrs.append(f"{key}: {value}")
-            details = "; ".join(attrs)
             self.power_tree.insert("", "end", text=dialog.result["name"], 
-                                  values=(details,))
+                                  values=(dialog.result.get("activation", ""), dialog.result.get("effect", "")))
     
     def edit_power(self, event):
         selected = self.power_tree.selection()
@@ -1138,14 +1230,8 @@ class CharacterSheetApp:
         
         if dialog.result:
             self.character.powers[index] = dialog.result
-            # Show attributes only in the description column
-            attrs = []
-            for key, value in dialog.result.items():
-                if key not in ["name", "description"]:
-                    attrs.append(f"{key}: {value}")
-            details = "; ".join(attrs)
             self.power_tree.item(item_id, text=dialog.result["name"], 
-                               values=(details,))
+                               values=(dialog.result.get("activation", ""), dialog.result.get("effect", "")))
     
     def remove_power(self):
         selected = self.power_tree.selection()
@@ -1161,6 +1247,8 @@ class CharacterSheetApp:
             index = self.foci_tree.index(selected[0])
             focus = self.character.foci[index]
             content = f"Name: {focus.get('name', '')}\n\n"
+            content += f"Type: {focus.get('type', '')}\n"
+            content += f"Force: {focus.get('force', '')}\n\n"
             content += f"Description: {focus.get('description', '')}"
             DescriptionViewer(self.root, "Focus Description", content)
     
@@ -1175,14 +1263,8 @@ class CharacterSheetApp:
         
         if dialog.result:
             self.character.foci.append(dialog.result)
-            # Show attributes only in the description column
-            attrs = []
-            for key, value in dialog.result.items():
-                if key not in ["name", "description"]:
-                    attrs.append(f"{key}: {value}")
-            details = "; ".join(attrs)
             self.foci_tree.insert("", "end", text=dialog.result["name"], 
-                                 values=(details,))
+                                 values=(dialog.result.get("type", ""), dialog.result.get("force", "")))
     
     def edit_focus(self, event):
         selected = self.foci_tree.selection()
@@ -1198,14 +1280,8 @@ class CharacterSheetApp:
         
         if dialog.result:
             self.character.foci[index] = dialog.result
-            # Show attributes only in the description column
-            attrs = []
-            for key, value in dialog.result.items():
-                if key not in ["name", "description"]:
-                    attrs.append(f"{key}: {value}")
-            details = "; ".join(attrs)
             self.foci_tree.item(item_id, text=dialog.result["name"], 
-                              values=(details,))
+                              values=(dialog.result.get("type", ""), dialog.result.get("force", "")))
     
     def remove_focus(self):
         selected = self.foci_tree.selection()
@@ -1371,6 +1447,25 @@ class CharacterSheetApp:
         self.stun_monitor.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.stun_monitor.bind("<Button-1>", self.toggle_stun_damage)
         
+        # Combat actions frame
+        actions_frame = ttk.Frame(notebook)
+        notebook.add(actions_frame, text="Combat Actions")
+        
+        # Initiative
+        init_frame = ttk.LabelFrame(actions_frame, text="Initiative")
+        init_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Button(init_frame, text="Roll Initiative", command=self.roll_initiative).pack(side=tk.LEFT, padx=5, pady=5)
+        self.init_result_label = ttk.Label(init_frame, text="Result: -")
+        self.init_result_label.pack(side=tk.LEFT, padx=5)
+        
+        # Healing
+        heal_frame = ttk.LabelFrame(actions_frame, text="Healing")
+        heal_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Button(heal_frame, text="Use Medkit", command=self.use_medkit).pack(side=tk.LEFT, padx=5, pady=5)
+        ttk.Button(heal_frame, text="Rest", command=self.rest).pack(side=tk.LEFT, padx=5, pady=5)
+        
         # Dice roller
         dice_frame = ttk.Frame(notebook)
         notebook.add(dice_frame, text="Dice Roller")
@@ -1385,7 +1480,7 @@ class CharacterSheetApp:
         self.roll_combo.set(ShadowrunCharacter.DICE_ROLL_OPTIONS[0])
         
         ttk.Label(roll_frame, text="Dice Pool:").pack(side=tk.LEFT, padx=5)
-        self.dice_pool_combo = ttk.Combobox(roll_frame, width=15)
+        self.dice_pool_combo = ttk.Combobox(roll_frame, width=25)
         self.dice_pool_combo.pack(side=tk.LEFT, padx=5)
         
         # Edge use
@@ -1421,15 +1516,15 @@ class CharacterSheetApp:
             ("Initiative Dice", "initiative_dice"),
             ("Physical Boxes", "physical_boxes"),
             ("Stun Boxes", "stun_boxes"),
-            ("Attack Rating (Unarmed)", "attr_attack_rating"),
-            ("Defense Rating", "defense_rating")
+            ("Armor Rating", "Armor"),
+            ("Weapon Accuracy", "Weapon Accuracy")
         ]
         
         for i, (label, attr) in enumerate(stats):
             ttk.Label(stats_frame, text=label+":").grid(row=i, column=0, sticky=tk.W, padx=5, pady=2)
             value_label = ttk.Label(stats_frame, text="0", font=("Arial", 10, "bold"))
             value_label.grid(row=i, column=1, sticky=tk.W, padx=5, pady=2)
-            setattr(self, f"{attr}_label", value_label)
+            setattr(self, f"{attr.replace(' ', '_').lower()}_label", value_label)
     
     def get_damage_status(self, damage, total_boxes):
         """Return status and color based on damage level"""
@@ -1615,6 +1710,18 @@ class CharacterSheetApp:
             if rank > 0:
                 options.append(f"{skill} ({rank})")
         
+        # Add spells
+        for spell in self.character.spells:
+            options.append(f"Spell: {spell.get('name', '')}")
+        
+        # Add powers
+        for power in self.character.powers:
+            options.append(f"Power: {power.get('name', '')}")
+        
+        # Add foci
+        for focus in self.character.foci:
+            options.append(f"Focus: {focus.get('name', '')}")
+        
         self.dice_pool_combo["values"] = options
         if options:
             self.dice_pool_combo.set(options[0])
@@ -1629,7 +1736,8 @@ class CharacterSheetApp:
             if "(" in dice_pool_text and ")" in dice_pool_text:
                 pool_size = int(dice_pool_text.split("(")[1].split(")")[0])
             else:
-                pool_size = 0
+                # Try to match gear, spells, or other special items
+                pool_size = self.get_special_dice_pool(dice_pool_text)
         except (ValueError, IndexError):
             pool_size = 0
             
@@ -1669,6 +1777,72 @@ class CharacterSheetApp:
             self.result_text.insert(tk.END, "FAILURE", "critical")
         
         self.result_text.config(state=tk.DISABLED)
+    
+    def get_special_dice_pool(self, dice_pool_text):
+        """Get dice pool for spells, powers, or gear"""
+        pool_size = 0
+        
+        # Check for spell
+        if dice_pool_text.startswith("Spell: "):
+            spell_name = dice_pool_text[7:]
+            for spell in self.character.spells:
+                if spell["name"] == spell_name:
+                    # Base pool is Magic + Spellcasting
+                    pool_size = self.character.attributes["Magic"]
+                    if "Sorcery" in self.character.skills:
+                        pool_size += self.character.skills["Sorcery"]
+                    break
+        
+        # Check for power
+        elif dice_pool_text.startswith("Power: "):
+            power_name = dice_pool_text[7:]
+            for power in self.character.powers:
+                if power["name"] == power_name:
+                    # Base pool is Magic + relevant skill
+                    pool_size = self.character.attributes["Magic"]
+                    if "Sorcery" in self.character.skills:
+                        pool_size += self.character.skills["Sorcery"]
+                    break
+        
+        # Check for focus
+        elif dice_pool_text.startswith("Focus: "):
+            focus_name = dice_pool_text[7:]
+            for focus in self.character.foci:
+                if focus["name"] == focus_name:
+                    # Base pool is Magic + relevant skill
+                    pool_size = self.character.attributes["Magic"]
+                    if "Sorcery" in self.character.skills:
+                        pool_size += self.character.skills["Sorcery"]
+                    break
+        
+        # Check for weapon
+        elif dice_pool_text.startswith("Weapon: "):
+            weapon_name = dice_pool_text[8:]
+            for weapon in self.character.gear["Weapons"]:
+                if weapon["name"] == weapon_name:
+                    # Base pool is Agility + Firearms
+                    pool_size = self.character.attributes["Agility"]
+                    if "Firearms" in self.character.skills:
+                        pool_size += self.character.skills["Firearms"]
+                    break
+        
+        return pool_size
+    
+    def roll_initiative(self):
+        result, dice_rolls = self.character.roll_initiative()
+        self.init_result_label.config(text=f"Result: {result} (Dice: {dice_rolls})")
+    
+    def use_medkit(self):
+        if self.character.use_medkit():
+            self.draw_condition_monitors()
+            messagebox.showinfo("Medkit Used", "Medkit applied! Physical and stun damage reduced.")
+        else:
+            messagebox.showwarning("No Medkit", "No medkit found in your gear!")
+    
+    def rest(self):
+        self.character.rest()
+        self.draw_condition_monitors()
+        messagebox.showinfo("Rest", "Character rested. Stun damage reduced by 1.")
     
     def update_all_fields(self):
         # Basic Info
@@ -1737,36 +1911,18 @@ class CharacterSheetApp:
         # Magic
         self.spell_tree.delete(*self.spell_tree.get_children())
         for spell in self.character.spells:
-            # Format attributes for display
-            attrs = []
-            for key, value in spell.items():
-                if key not in ["name", "description"]:
-                    attrs.append(f"{key}: {value}")
-            details = "; ".join(attrs)
             self.spell_tree.insert("", "end", text=spell.get("name", ""), 
-                                  values=(details,))
+                                  values=(spell.get("type", ""), spell.get("drain", "")))
         
         self.power_tree.delete(*self.power_tree.get_children())
         for power in self.character.powers:
-            # Format attributes for display
-            attrs = []
-            for key, value in power.items():
-                if key not in ["name", "description"]:
-                    attrs.append(f"{key}: {value}")
-            details = "; ".join(attrs)
             self.power_tree.insert("", "end", text=power.get("name", ""), 
-                                  values=(details,))
+                                  values=(power.get("activation", ""), power.get("effect", "")))
         
         self.foci_tree.delete(*self.foci_tree.get_children())
         for focus in self.character.foci:
-            # Format attributes for display
-            attrs = []
-            for key, value in focus.items():
-                if key not in ["name", "description"]:
-                    attrs.append(f"{key}: {value}")
-            details = "; ".join(attrs)
             self.foci_tree.insert("", "end", text=focus.get("name", ""), 
-                                 values=(details,))
+                                 values=(focus.get("type", ""), focus.get("force", "")))
         
         # Contacts
         for item in self.contact_tree.get_children():
@@ -1817,14 +1973,8 @@ class CharacterSheetApp:
         self.initiative_dice_label.config(text=str(self.character.initiative_dice))
         self.physical_boxes_label.config(text=str(self.character.physical_boxes))
         self.stun_boxes_label.config(text=str(self.character.stun_boxes))
-        
-        # Calculate attack rating (unarmed example)
-        attack_rating = self.character.attributes["Strength"] + self.character.attributes["Reaction"]
-        self.attr_attack_rating_label.config(text=str(attack_rating))
-        
-        # Calculate defense rating (simplified)
-        defense_rating = self.character.attributes["Body"] + 6  # Base armor
-        self.defense_rating_label.config(text=str(defense_rating))
+        self.armor_label.config(text=str(self.character.attributes.get("Armor", 0)))
+        self.weapon_accuracy_label.config(text=str(self.character.attributes.get("Weapon Accuracy", 0)))
         
         # Redraw condition monitors
         self.draw_condition_monitors()
