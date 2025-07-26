@@ -122,6 +122,72 @@ class ShadowrunCharacter:
         "Binding"
     ]
     
+    # Predefined spells, powers, and foci
+    PREDEFINED_SPELLS = [
+        {"name": "Power Bolt", "type": "Combat", "drain": "F", "description": "Direct combat spell that deals physical damage"},
+        {"name": "Stun Bolt", "type": "Combat", "drain": "F", "description": "Direct combat spell that deals stun damage"},
+        {"name": "Heal", "type": "Health", "drain": "F", "description": "Heals physical damage"},
+        {"name": "Invisibility", "type": "Illusion", "drain": "F", "description": "Makes the target invisible"},
+        {"name": "Levitate", "type": "Manipulation", "drain": "F", "description": "Allows the target to levitate"}
+    ]
+    
+    PREDEFINED_POWERS = [
+        {"name": "Improved Reflexes", "activation": "Passive", "effect": "+1d6 Initiative Dice", "description": "Improves reaction time"},
+        {"name": "Combat Sense", "activation": "Passive", "effect": "+1 Defense Rating", "description": "Enhances combat awareness"},
+        {"name": "Killing Hands", "activation": "Simple Action", "effect": "Unarmed attacks deal physical damage", "description": "Channels energy into unarmed strikes"},
+        {"name": "Astral Perception", "activation": "Simple Action", "effect": "See into astral plane", "description": "Perceives astral space"},
+        {"name": "Pain Resistance", "activation": "Passive", "effect": "+2 damage resistance", "description": "Reduces effects of pain"}
+    ]
+    
+    PREDEFINED_FOCI = [
+        {"name": "Power Focus", "type": "Sustaining", "force": 3, "description": "Increases Magic attribute"},
+        {"name": "Weapon Focus", "type": "Weapon", "force": 2, "description": "Enhances a specific weapon"},
+        {"name": "Spellcasting Focus", "type": "Spell", "force": 1, "description": "Improves spellcasting"},
+        {"name": "Qi Focus", "type": "Adept", "force": 2, "description": "Enhances adept powers"},
+        {"name": "Binding Focus", "type": "Binding", "force": 3, "description": "Aids in spirit binding"}
+    ]
+    
+    # Predefined gear with attributes and Prices
+    PREDEFINED_GEAR = {
+        "Weapons": [
+            {"name": "Ares Predator V", "Damage": "5P", "Accuracy": "5", "AP": "-1", "Mode": "SA", "RC": "0", "Ammo": "15", "Type": "Pistol", "Price": 800},
+            {"name": "Remington Roomsweeper", "Damage": "4P", "Accuracy": "4", "AP": "-1", "Mode": "SS", "RC": "0", "Ammo": "5", "Type": "Shotgun", "Price": 450},
+            {"name": "AK-97", "Damage": "6P", "Accuracy": "5", "AP": "-2", "Mode": "SA/BF/FA", "RC": "1", "Ammo": "38", "Type": "Rifle", "Price": 1200}
+        ],
+        "Armor": [
+            {"name": "Armor Jacket", "Rating": "4", "Social": "0", "Capacity": "6", "Type": "Jacket", "Price": 1000},
+            {"name": "Full Body Armor", "Rating": "6", "Social": "-4", "Capacity": "10", "Type": "Full Body", "Price": 2500},
+            {"name": "Ballistic Mask", "Rating": "+2", "Social": "-2", "Capacity": "0", "Type": "Helmet", "Price": 300}
+        ],
+        "Cyberware": [
+            {"name": "Datajack", "Essence Cost": "0.2", "Capacity": "-", "Rating": "-", "Type": "Headware", "Price": 500},
+            {"name": "Cybereyes", "Essence Cost": "0.4", "Capacity": "6", "Rating": "3", "Type": "Eyeware", "Price": 2000},
+            {"name": "Wired Reflexes", "Essence Cost": "1.0", "Capacity": "-", "Rating": "2", "Type": "Bodyware", "Price": 15000}
+        ],
+        "Bioware": [
+            {"name": "Muscle Augmentation", "Essence Cost": "0.6", "Rating": "2", "Capacity": "-", "Type": "Muscle", "Price": 12000},
+            {"name": "Synaptic Booster", "Essence Cost": "0.8", "Rating": "2", "Capacity": "-", "Type": "Nervous", "Price": 18000},
+            {"name": "Tailored Pheromones", "Essence Cost": "0.4", "Rating": "3", "Capacity": "-", "Type": "Endocrine", "Price": 10000}
+        ]
+    }
+    
+    # Vehicle types
+    VEHICLE_TYPES = [
+        "Motorcycle", "Sedan", "Sports Car", "Truck", "Helicopter", 
+        "Drone", "Boat", "VTOL", "Submarine", "Walker"
+    ]
+    
+    # Minor and Major Actions
+    MINOR_ACTIONS = [
+        "Free Action", "Simple Action", "Interrupt Action", "Change Gun Mode",
+        "Drop Prone", "Stand Up", "Reload Weapon", "Activate Device"
+    ]
+    
+    MAJOR_ACTIONS = [
+        "Complex Action", "Full Attack", "Cast Spell", "Summon Spirit",
+        "Hack Device", "Pilot Vehicle", "Full Defense", "Overwatch"
+    ]
+    
     def __init__(self):
         self.reset_character()
         
@@ -131,13 +197,14 @@ class ShadowrunCharacter:
         self.role = ""
         self.background = ""
         self.lifestyle = "Low"
-        self.karma = 0
+        self.karma = 50  # Default karma set to 50
         self.nuyen = 5000
         self.magic_type = "Mundane"
         self.tradition = ""
         self.mentor_spirit = ""
         self.initiation_grade = 0
-        self.age = 25  # New age field
+        self.age = 25
+        self.reputation = 0  # New reputation field
         
         # Attributes
         self.attributes = {attr: 1 for attr in self.ATTRIBUTES}
@@ -164,10 +231,11 @@ class ShadowrunCharacter:
         self.foci = []    # Now stored as dictionaries: {"name": "", "description": "", "type": "", "force": 0}
         
         # Combat stats
-        self.calculate_derived_stats()
         self.physical_damage = 0
         self.stun_damage = 0
         self.initiative_passed = 0
+        self.damage_penalty = 0  # Track damage penalty
+        self.calculate_derived_stats()
     
     def calculate_derived_stats(self):
         # Reset attributes to base before applying bonuses
@@ -224,6 +292,9 @@ class ShadowrunCharacter:
                 if essence < i:
                     magic = min(magic, 6 - i)
             self.attributes["Magic"] = magic
+        
+        # Calculate damage penalty
+        self.damage_penalty = -(self.physical_damage // 3 + self.stun_damage // 3)
 
     def add_gear(self, category, item):
         self.gear[category].append(item)
@@ -264,10 +335,13 @@ class ShadowrunCharacter:
         # Recalculate derived stats
         self.calculate_derived_stats()
     
-    def roll_dice(self, pool_size, edge_action=None):
-        """Roll dice for Shadowrun system with edge options"""
+    def roll_dice(self, pool_size, edge_action=None, use_wild_die=False):
+        """Roll dice for Shadowrun system with edge options and wild die"""
         if pool_size <= 0:
             return {"dice": [], "hits": 0, "glitch": False, "critical_glitch": False}
+        
+        # Apply damage penalty
+        pool_size += self.damage_penalty
         
         # Handle edge actions
         extra_hits = 0
@@ -289,9 +363,31 @@ class ShadowrunCharacter:
                 pass  # Not implemented yet
         
         dice = []
+        wild_die_result = None
+        wild_die_hits = 0
+        
         if not edge_action or edge_action != "Heroic Effort (3 Edge)":
             # Roll initial dice
             dice = [random.randint(1, 6) for _ in range(pool_size)]
+            
+            # Handle wild die
+            if use_wild_die and pool_size > 0:
+                wild_die = dice.pop(0)
+                wild_die_result = [wild_die]
+                
+                # Check for exploding wild die
+                while wild_die == 6:
+                    wild_die = random.randint(1, 6)
+                    wild_die_result.append(wild_die)
+                    wild_die_hits += 1
+                
+                # If wild die is 6, count as hit
+                if 6 in wild_die_result:
+                    wild_die_hits += 1
+                
+                # If wild die is 1, cancel one hit
+                if 1 in wild_die_result:
+                    wild_die_hits = -1
             
             # Reroll non-hits if selected
             if reroll_non_hits:
@@ -299,7 +395,7 @@ class ShadowrunCharacter:
                 rerolled = [random.randint(1, 6) for _ in non_hits]
                 dice = [r for r in dice if r >= 5] + rerolled
         
-        hits = sum(1 for r in dice if r >= 5) + extra_hits
+        hits = sum(1 for r in dice if r >= 5) + extra_hits + wild_die_hits
         ones = sum(1 for r in dice if r == 1)
         total_dice = len(dice)
         
@@ -308,9 +404,10 @@ class ShadowrunCharacter:
         
         return {
             "dice": dice,
-            "hits": hits,
+            "hits": max(0, hits),
             "glitch": glitch,
-            "critical_glitch": critical_glitch
+            "critical_glitch": critical_glitch,
+            "wild_die": wild_die_result
         }
     
     def roll_initiative(self):
@@ -325,6 +422,7 @@ class ShadowrunCharacter:
             self.physical_damage = max(0, self.physical_damage - amount)
         elif damage_type == "stun":
             self.stun_damage = max(0, self.stun_damage - amount)
+        self.calculate_derived_stats()
     
     def use_medkit(self):
         """Use a medkit to heal damage if available"""
@@ -379,6 +477,26 @@ class ShadowrunCharacter:
         """Reset current Edge to maximum value"""
         self.current_edge = self.attributes["Edge"]
     
+    def trade_karma_for_nuyen(self, amount):
+        """Trade karma for nuyen (2000 nuyen per 1 karma)"""
+        if self.karma >= amount:
+            self.karma -= amount
+            self.nuyen += amount * 2000
+            return True
+        return False
+    
+    def increase_attribute(self, attribute):
+        """Increase attribute using karma"""
+        current_rating = self.base_attributes[attribute]
+        karma_cost = (current_rating + 1) * 5
+        
+        if self.karma >= karma_cost:
+            self.karma -= karma_cost
+            self.base_attributes[attribute] = current_rating + 1
+            self.calculate_derived_stats()
+            return True
+        return False
+    
     def to_dict(self):
         return {
             "name": self.name,
@@ -393,6 +511,7 @@ class ShadowrunCharacter:
             "mentor_spirit": self.mentor_spirit,
             "initiation_grade": self.initiation_grade,
             "age": self.age,
+            "reputation": self.reputation,
             "attributes": self.attributes,
             "base_attributes": self.base_attributes,
             "skills": self.skills,
@@ -410,7 +529,8 @@ class ShadowrunCharacter:
             "initiative_dice": self.initiative_dice,
             "physical_damage": self.physical_damage,
             "stun_damage": self.stun_damage,
-            "current_edge": self.current_edge
+            "current_edge": self.current_edge,
+            "damage_penalty": self.damage_penalty
         }
     
     def from_dict(self, data):
@@ -425,6 +545,10 @@ class ShadowrunCharacter:
         # Ensure current_edge exists
         if not hasattr(self, 'current_edge'):
             self.current_edge = self.attributes["Edge"]
+            
+        # Ensure reputation exists
+        if not hasattr(self, 'reputation'):
+            self.reputation = 0
             
         self.calculate_derived_stats()
         return self
@@ -458,21 +582,27 @@ class DescriptionViewer(tk.Toplevel):
 
 class EditGearDialog(tk.Toplevel):
     GEAR_ATTRIBUTES = {
-        "Weapons": ["Damage", "Accuracy", "AP", "Mode", "RC", "Ammo", "Type"],
-        "Armor": ["Rating", "Social", "Capacity", "Type"],
-        "Cyberware": ["Essence Cost", "Capacity", "Rating", "Type"],
-        "Bioware": ["Essence Cost", "Rating", "Capacity", "Type"],
-        "Magic Items": ["Force", "Type", "Binding"],
-        "Medkits": ["Rating", "Quantity", "Type"],
-        "Electronics": ["Rating", "Capacity", "Function"],
-        "Other": ["Effect", "Duration", "Potency"]
+        "Weapons": ["Damage", "Accuracy", "AP", "Mode", "RC", "Ammo", "Type", "Price"],
+        "Armor": ["Rating", "Social", "Capacity", "Type", "Price"],
+        "Cyberware": ["Essence Cost", "Capacity", "Rating", "Type", "Price"],
+        "Bioware": ["Essence Cost", "Rating", "Capacity", "Type", "Price"],
+        "Magic Items": ["Force", "Type", "Binding", "Price"],
+        "Medkits": ["Rating", "Quantity", "Type", "Price"],
+        "Electronics": ["Rating", "Capacity", "Function", "Price"],
+        "Other": ["Effect", "Duration", "Potency", "Price"],
+        "Spell": ["Type", "Drain", "Price"],
+        "Power": ["Activation", "Effect", "Price"],
+        "Focus": ["Type", "Force", "Price"]
     }
     
     GEAR_OPTIONS = {
         ("Weapons", "Type"): ShadowrunCharacter.WEAPON_TYPES,
         ("Armor", "Type"): ShadowrunCharacter.ARMOR_TYPES,
         ("Cyberware", "Type"): ShadowrunCharacter.CYBERWARE_TYPES,
-        ("Medkits", "Type"): ShadowrunCharacter.MEDKIT_TYPES
+        ("Medkits", "Type"): ShadowrunCharacter.MEDKIT_TYPES,
+        ("Spell", "Type"): ["Combat", "Health", "Illusion", "Manipulation"],
+        ("Power", "Activation"): ["Passive", "Simple Action", "Complex Action"],
+        ("Focus", "Type"): ["Sustaining", "Weapon", "Spell", "Adept", "Binding"]
     }
     
     def __init__(self, parent, category, item=None):
@@ -494,21 +624,27 @@ class EditGearDialog(tk.Toplevel):
         main_frame = ttk.Frame(self)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
+        # Predefined items button
+        if self.category in ["Spell", "Power", "Focus", "Weapons", "Armor", "Cyberware", "Bioware"]:
+            btn_frame = ttk.Frame(main_frame)
+            btn_frame.grid(row=0, column=0, columnspan=2, pady=5)
+            ttk.Button(btn_frame, text="Use Predefined", command=self.use_predefined).pack(side=tk.LEFT)
+        
         # Name
-        ttk.Label(main_frame, text="Name:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Label(main_frame, text="Name:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
         self.name_entry = ttk.Entry(main_frame, width=30)
-        self.name_entry.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+        self.name_entry.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
         self.name_entry.insert(0, self.item.get("name", ""))
         
         # Description
-        ttk.Label(main_frame, text="Description:").grid(row=1, column=0, sticky=tk.NW, padx=5, pady=5)
+        ttk.Label(main_frame, text="Description:").grid(row=2, column=0, sticky=tk.NW, padx=5, pady=5)
         self.desc_text = scrolledtext.ScrolledText(main_frame, width=30, height=4, 
                                                   bg="#333", fg="#e0e0e0", insertbackground="white")
-        self.desc_text.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+        self.desc_text.grid(row=2, column=1, sticky=tk.W, padx=5, pady=5)
         self.desc_text.insert(tk.END, self.item.get("description", ""))
         
         # Standard attributes for category
-        row = 2
+        row = 3
         self.attr_entries = {}
         for attr in self.GEAR_ATTRIBUTES.get(self.category, []):
             ttk.Label(main_frame, text=f"{attr}:").grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
@@ -518,11 +654,15 @@ class EditGearDialog(tk.Toplevel):
             if options:
                 # Create combobox for attributes with predefined options
                 entry = ttk.Combobox(main_frame, values=options, width=15)
-                entry.set(self.item.get(attr, options[0]))
-            elif attr == "Quantity" or attr == "Rating":
+                entry.set(self.item.get(attr, options[0] if options else ""))
+            elif attr == "Quantity" or attr == "Rating" or attr == "Force":
                 # Create spinbox for quantity and rating
                 entry = ttk.Spinbox(main_frame, from_=1, to=100, width=15)
                 entry.set(str(self.item.get(attr, "1")))
+            elif attr == "Price":
+                # Create entry with validation for Price
+                entry = ttk.Entry(main_frame, width=15)
+                entry.insert(0, str(self.item.get(attr, "0")))
             else:
                 # Create regular entry field
                 entry = ttk.Entry(main_frame, width=15)
@@ -553,6 +693,74 @@ class EditGearDialog(tk.Toplevel):
         
         ttk.Button(btn_frame, text="Save", command=self.save).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side=tk.LEFT, padx=5)
+    
+    def use_predefined(self):
+        """Load predefined items based on category"""
+        if self.category == "Spell":
+            predefined = ShadowrunCharacter.PREDEFINED_SPELLS
+            title = "Select Spell"
+        elif self.category == "Power":
+            predefined = ShadowrunCharacter.PREDEFINED_POWERS
+            title = "Select Power"
+        elif self.category == "Focus":
+            predefined = ShadowrunCharacter.PREDEFINED_FOCI
+            title = "Select Focus"
+        elif self.category == "Weapons":
+            predefined = ShadowrunCharacter.PREDEFINED_GEAR["Weapons"]
+            title = "Select Weapon"
+        elif self.category == "Armor":
+            predefined = ShadowrunCharacter.PREDEFINED_GEAR["Armor"]
+            title = "Select Armor"
+        elif self.category == "Cyberware":
+            predefined = ShadowrunCharacter.PREDEFINED_GEAR["Cyberware"]
+            title = "Select Cyberware"
+        elif self.category == "Bioware":
+            predefined = ShadowrunCharacter.PREDEFINED_GEAR["Bioware"]
+            title = "Select Bioware"
+        else:
+            return
+        
+        dialog = tk.Toplevel(self)
+        dialog.title(title)
+        dialog.geometry("400x300")
+        dialog.configure(bg="#1c1c1c")
+        
+        # Create listbox
+        list_frame = ttk.Frame(dialog)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        listbox = tk.Listbox(list_frame, bg="#333", fg="#e0e0e0", font=("Arial", 10))
+        listbox.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        for item in predefined:
+            listbox.insert(tk.END, item["name"])
+        
+        # Button to select
+        def select_item():
+            selected = listbox.curselection()
+            if selected:
+                item = predefined[selected[0]]
+                self.name_entry.delete(0, tk.END)
+                self.name_entry.insert(0, item.get("name", ""))
+                self.desc_text.delete(1.0, tk.END)
+                self.desc_text.insert(tk.END, item.get("description", ""))
+                
+                # Set attributes
+                for attr, widget in self.attr_entries.items():
+                    if attr in item:
+                        if isinstance(widget, ttk.Combobox):
+                            widget.set(item[attr])
+                        else:
+                            widget.delete(0, tk.END)
+                            widget.insert(0, str(item[attr]))
+                
+                dialog.destroy()
+        
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        ttk.Button(btn_frame, text="Select", command=select_item).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Cancel", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
     
     def save(self):
         name = self.name_entry.get()
@@ -585,7 +793,6 @@ class EditGearDialog(tk.Toplevel):
         self.result.update(attributes)
         self.destroy()
 
-# Update EditContactDialog class
 class EditContactDialog(tk.Toplevel):
     def __init__(self, parent, contact=None):
         super().__init__(parent)
@@ -741,7 +948,7 @@ class CharacterSheetApp:
         # Create tabs
         self.tabs = {}
         tab_names = ["Basic Info", "Skills", "Qualities", "Gear", 
-                    "Magic/Resonance", "Contacts", "Background", "Combat Stats", "Wiki"]  # Added Wiki tab
+                    "Magic/Resonance", "Contacts", "Background", "Combat Stats", "Wiki"]
         
         for name in tab_names:
             tab = ttk.Frame(self.notebook)
@@ -757,7 +964,7 @@ class CharacterSheetApp:
         self.setup_contacts_tab()
         self.setup_background_tab()
         self.setup_combat_stats_tab()
-        self.setup_wiki_tab()  # New wiki tab
+        self.setup_wiki_tab()
         
         # Load default character
         self.update_all_fields()
@@ -815,11 +1022,17 @@ class CharacterSheetApp:
         ttk.Label(char_frame, text="Karma:").grid(row=3, column=2, sticky=tk.W, padx=5, pady=2)
         self.karma_spin = ttk.Spinbox(char_frame, from_=0, to=100, width=5)
         self.karma_spin.grid(row=3, column=3, padx=5, pady=2, sticky=tk.W)
+        self.karma_spin.set(50)  # Default karma
         
         # Nuyen
         ttk.Label(char_frame, text="Nuyen:").grid(row=4, column=0, sticky=tk.W, padx=5, pady=2)
         self.nuyen_entry = ttk.Entry(char_frame, width=15)
         self.nuyen_entry.grid(row=4, column=1, padx=5, pady=2, sticky=tk.W)
+        
+        # Trade Karma for Nuyen button
+        ttk.Button(char_frame, text="Trade Karma for Nuyen", 
+                  command=self.trade_karma_for_nuyen).grid(row=4, column=2, padx=5, pady=2, sticky=tk.W)
+        ttk.Label(char_frame, text="1 Karma = 2000¥").grid(row=4, column=3, padx=5, pady=2, sticky=tk.W)
         
         # Attributes frame
         attr_frame = ttk.Frame(notebook)
@@ -831,13 +1044,13 @@ class CharacterSheetApp:
         # Use a grid layout with 3 columns per row for more space
         for i, attr in enumerate(ShadowrunCharacter.ATTRIBUTES):
             row = i // 3
-            col = (i % 3) * 2
+            col = (i % 3) * 4  # Each attribute takes 4 columns
             
-            ttk.Label(attr_frame, text=f"{attr}:").grid(row=row, column=col, sticky=tk.W, padx=15, pady=5)  # Increased padding
+            ttk.Label(attr_frame, text=f"{attr}:").grid(row=row, column=col, sticky=tk.W, padx=15, pady=5)
             
             var = tk.IntVar()
-            entry = ttk.Spinbox(attr_frame, from_=1, to=10, width=5, textvariable=var)  # Wider spinbox
-            entry.grid(row=row, column=col+1, padx=(0, 15), pady=5)  # More padding
+            entry = ttk.Spinbox(attr_frame, from_=1, to=10, width=5, textvariable=var)
+            entry.grid(row=row, column=col+1, padx=(0, 15), pady=5, sticky=tk.W)
             entry.bind("<FocusOut>", self.update_derived_stats)
             
             self.attribute_vars[attr] = var
@@ -845,13 +1058,46 @@ class CharacterSheetApp:
             
             # Add label for metatype bonus - place in next column with spacing
             bonus_label = ttk.Label(attr_frame, text="", foreground="#4F9BFF")
-            bonus_label.grid(row=row, column=col+2, padx=(0, 10), pady=5)
+            bonus_label.grid(row=row, column=col+2, padx=(0, 10), pady=5, sticky=tk.W)
             setattr(self, f"{attr.lower()}_bonus_label", bonus_label)
+            
+            # Add button to increase attribute with karma
+            if attr not in ["Edge", "Essence"]:
+                btn = ttk.Button(attr_frame, text="+", width=2, 
+                                command=lambda a=attr: self.increase_attribute(a))
+                btn.grid(row=row, column=col+3, padx=5, pady=5, sticky=tk.W)
         
         # Auto Roll button
         ttk.Button(attr_frame, text="Auto Roll Attributes", command=self.autoroll_attributes).grid(
-            row=row+1, column=0, columnspan=6, pady=15
+            row=row+1, column=0, columnspan=12, pady=15
         )
+    
+    def trade_karma_for_nuyen(self):
+        try:
+            amount = int(tk.simpledialog.askinteger("Trade Karma", "How much Karma to trade? (1 Karma = 2000¥)", 
+                                                   parent=self.root, minvalue=1, maxvalue=self.character.karma))
+            if amount:
+                if self.character.trade_karma_for_nuyen(amount):
+                    self.update_all_fields()
+                    messagebox.showinfo("Trade Complete", f"Traded {amount} Karma for {amount*2000}¥")
+                else:
+                    messagebox.showerror("Error", "Not enough Karma!")
+        except TypeError:
+            pass  # User canceled
+    
+    def increase_attribute(self, attribute):
+        current_rating = self.character.base_attributes[attribute]
+        karma_cost = (current_rating + 1) * 5
+        
+        if self.character.karma >= karma_cost:
+            if self.character.increase_attribute(attribute):
+                self.update_all_fields()
+                messagebox.showinfo("Attribute Increased", 
+                                   f"Increased {attribute} to {current_rating+1} for {karma_cost} Karma")
+            else:
+                messagebox.showerror("Error", "Failed to increase attribute!")
+        else:
+            messagebox.showerror("Error", f"Not enough Karma! Cost: {karma_cost} Karma")
     
     def autoroll_attributes(self):
         """Auto-roll attributes with metatype considerations"""
@@ -1189,7 +1435,7 @@ class CharacterSheetApp:
         self.spell_tree.heading("Type", text="Type")
         self.spell_tree.column("Type", width=100)
         self.spell_tree.heading("Drain", text="Drain")
-        self.spell_tree.column("Drain", width=50)
+        self.spell_tree.column("Drain", width=80)  # Increased width for better visibility
         self.spell_tree.pack(fill=tk.BOTH, expand=True)
         self.spell_tree.bind("<Double-1>", self.view_spell)
         self.spell_tree.bind("<<TreeviewSelect>>", self.show_spell_description)
@@ -1241,7 +1487,7 @@ class CharacterSheetApp:
         self.foci_tree.heading("Type", text="Type")
         self.foci_tree.column("Type", width=100)
         self.foci_tree.heading("Force", text="Force")
-        self.foci_tree.column("Force", width=50)
+        self.foci_tree.column("Force", width=80)  # Increased width for better visibility
         self.foci_tree.pack(fill=tk.BOTH, expand=True)
         self.foci_tree.bind("<Double-1>", self.view_focus)
         self.foci_tree.bind("<<TreeviewSelect>>", self.show_focus_description)
@@ -1510,15 +1756,21 @@ class CharacterSheetApp:
     def setup_background_tab(self):
         tab = self.tabs["Background"]
         
-        # Age field
-        age_frame = ttk.Frame(tab)
-        age_frame.pack(fill=tk.X, padx=10, pady=5)
+        # Age and Reputation on the same row
+        age_rep_frame = ttk.Frame(tab)
+        age_rep_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ttk.Label(age_frame, text="Age:").pack(side=tk.LEFT, padx=5)
-        self.age_spin = ttk.Spinbox(age_frame, from_=0, to=200, width=5)
+        ttk.Label(age_rep_frame, text="Age:").pack(side=tk.LEFT, padx=5)
+        self.age_spin = ttk.Spinbox(age_rep_frame, from_=0, to=200, width=5)
         self.age_spin.pack(side=tk.LEFT, padx=5)
         self.age_spin.set(self.character.age)
         self.age_spin.bind("<FocusOut>", self.update_derived_stats)
+        
+        ttk.Label(age_rep_frame, text="Reputation:").pack(side=tk.LEFT, padx=5)
+        self.reputation_spin = ttk.Spinbox(age_rep_frame, from_=0, to=20, width=5)
+        self.reputation_spin.pack(side=tk.LEFT, padx=5)
+        self.reputation_spin.set(self.character.reputation)
+        self.reputation_spin.bind("<FocusOut>", self.update_derived_stats)
         
         # Background text
         frame = ttk.LabelFrame(tab, text="Character Background")
@@ -1546,15 +1798,54 @@ class CharacterSheetApp:
         
         # Populate wiki tree with categories
         categories = {
-            "Gear": ["Weapons", "Armor", "Cyberware", "Bioware", "Electronics", "Medkits"],
+            "Gear": ShadowrunCharacter.GEAR_CATEGORIES,
             "Magic": ["Spells", "Powers", "Foci", "Traditions"],
+            "Vehicles": ShadowrunCharacter.VEHICLE_TYPES,
+            "Actions": ["Minor Actions", "Major Actions"],
             "Rules": ["Combat", "Magic System", "Hacking", "Vehicles"]
         }
+        
+        self.wiki_items = {}
         
         for category, subcategories in categories.items():
             parent = self.wiki_tree.insert("", "end", text=category, open=True)
             for sub in subcategories:
-                self.wiki_tree.insert(parent, "end", text=sub)
+                item_id = self.wiki_tree.insert(parent, "end", text=sub)
+                self.wiki_items[sub] = item_id
+        
+        # Add specific items to gear categories
+        for category in ShadowrunCharacter.GEAR_CATEGORIES:
+            parent_id = self.wiki_items.get(category)
+            if parent_id:
+                for item in ShadowrunCharacter.PREDEFINED_GEAR.get(category, []):
+                    self.wiki_tree.insert(parent_id, "end", text=item["name"])
+        
+        # Add specific magic items
+        for spell in ShadowrunCharacter.PREDEFINED_SPELLS:
+            parent_id = self.wiki_items.get("Spells")
+            if parent_id:
+                self.wiki_tree.insert(parent_id, "end", text=spell["name"])
+                
+        for power in ShadowrunCharacter.PREDEFINED_POWERS:
+            parent_id = self.wiki_items.get("Powers")
+            if parent_id:
+                self.wiki_tree.insert(parent_id, "end", text=power["name"])
+                
+        for focus in ShadowrunCharacter.PREDEFINED_FOCI:
+            parent_id = self.wiki_items.get("Foci")
+            if parent_id:
+                self.wiki_tree.insert(parent_id, "end", text=focus["name"])
+        
+        # Add actions
+        minor_parent = self.wiki_items.get("Minor Actions")
+        if minor_parent:
+            for action in ShadowrunCharacter.MINOR_ACTIONS:
+                self.wiki_tree.insert(minor_parent, "end", text=action)
+                
+        major_parent = self.wiki_items.get("Major Actions")
+        if major_parent:
+            for action in ShadowrunCharacter.MAJOR_ACTIONS:
+                self.wiki_tree.insert(major_parent, "end", text=action)
         
         # Right panel - content display
         content_frame = ttk.Frame(paned_window)
@@ -1580,21 +1871,70 @@ class CharacterSheetApp:
         
         # Wiki content data
         wiki_data = {
-            "Weapons": "**Common Weapons**\n\n- Pistols (DV 2P, ACC 5)\n- Assault Rifles (DV 4P, ACC 6)\n- Sniper Rifles (DV 5P, ACC 7)\n- Shotguns (DV 4P, ACC 4)\n\n**Special Rules**\n- Recoil affects burst fire\n- Smartgun systems add +2 ACC",
-            "Armor": "**Armor Types**\n\n- Armor Jacket (Rating 4)\n- Full Body Armor (Rating 6)\n- Helmet (Rating +2)\n- Shield (Rating +3)\n\n**Special Rules**\n- Stacking armor has diminishing returns",
-            "Cyberware": "**Common Cyberware**\n\n- Datajack (0.2 Essence)\n- Cybereyes (0.4 Essence)\n- Cyberarms (1.0 Essence)\n- Wired Reflexes (Rating 1-3, Essence cost varies)\n\n**Essence Cost**\n- Cyberware reduces essence permanently",
-            "Bioware": "**Common Bioware**\n\n- Muscle Augmentation (+1 Strength)\n- Synaptic Booster (+1 Reaction)\n- Tailored Pheromones (+1 Charisma)\n\n**Essence Cost**\n- Bioware has lower essence cost than cyberware",
-            "Electronics": "**Common Electronics**\n\n- Commlink (Rating 1-6)\n- Cyberdeck (Hacking device)\n- Medkit (Rating 1-6)\n\n**Special Rules**\n- Device rating affects functionality",
-            "Medkits": "**Medkit Ratings**\n\n- Rating 1: +1 to First Aid tests\n- Rating 3: +3 to First Aid tests\n- Rating 6: +6 to First Aid tests\n\n**Usage**\n- Each use consumes one charge",
-            "Spells": "**Spell Types**\n\n- Combat Spells (Direct damage)\n- Health Spells (Healing)\n- Illusion Spells (Deception)\n- Manipulation Spells (Control)\n\n**Drain**\n- Casting causes drain damage to caster",
-            "Powers": "**Adept Powers**\n\n- Improved Reflexes (+Initiative dice)\n- Combat Sense (+Defense)\n- Killing Hands (Unarmed combat boost)\n\n**Activation**\n- Powers are always active or require simple action",
-            "Foci": "**Focus Types**\n\n- Weapon Focus (Enhances specific weapon)\n- Power Focus (Boosts magic rating)\n- Spell Focus (Enhances specific spell)\n\n**Binding**\n- Foci must be bound with karma",
-            "Traditions": "**Magic Traditions**\n\n- Hermetic (Logic-based)\n- Shamanic (Charisma-based)\n- Christian Theurgy (Willpower-based)\n- Buddhist (Intuition-based)\n\n**Drain Resistance**\n- Tradition determines drain resistance attribute",
+            # Gear categories
+            "Weapons": "**Weapons**\n\nFirearms, blades, and other implements of destruction. Each weapon has:\n- Damage Value (DV)\n- Accuracy (ACC)\n- Armor Penetration (AP)\n- Mode (SA, BF, FA)\n- Recoil Compensation (RC)\n- Ammo Capacity\n\n**Special Rules**\n- Recoil affects burst fire\n- Smartgun systems add +2 ACC",
+            "Armor": "**Armor**\n\nProtective gear to reduce damage. Each armor has:\n- Rating (protection value)\n- Social penalty\n- Capacity for modifications\n\n**Special Rules**\n- Stacking armor has diminishing returns\n- Full body armor provides best protection but high social penalty",
+            "Cyberware": "**Cyberware**\n\nTechnological implants that enhance abilities but cost Essence. Each cyberware has:\n- Essence Cost\n- Capacity\n- Rating\n\n**Special Rules**\n- Essence loss affects magic users\n- Cyberlimbs can be customized",
+            "Bioware": "**Bioware**\n\nBiological enhancements that integrate with the body. Each bioware has:\n- Essence Cost\n- Rating\n- Capacity\n\n**Special Rules**\n- Lower essence cost than cyberware\n- More natural integration",
+            "Magic Items": "**Magic Items**\n\nItems with magical properties or that enhance magical abilities. Each item has:\n- Force\n- Type\n- Binding requirements\n\n**Special Rules**\n- Foci must be bound with karma\n- Sustaining foci reduce drain for sustained spells",
+            "Electronics": "**Electronics**\n\nDevices and gadgets for the digital age. Each item has:\n- Rating\n- Capacity\n- Function\n\n**Special Rules**\n- Device rating affects functionality\n- Commlinks for communication\n- Cyberdecks for hacking",
+            "Medkits": "**Medkits**\n\nMedical supplies for treating injuries. Each medkit has:\n- Rating (effectiveness)\n- Quantity (uses)\n\n**Special Rules**\n- Higher rating provides better healing\n- Each use consumes one charge",
+            "Other": "**Other Gear**\n\nMiscellaneous equipment for various purposes. Each item has:\n- Effect\n- Duration\n- Potency\n\n**Special Rules**\n- Includes tools, chemicals, and special items",
+            
+            # Magic categories
+            "Spells": "**Spells**\n\nMagical effects created through willpower and tradition. Each spell has:\n- Type (Combat, Health, Illusion, Manipulation)\n- Drain value (cost to cast)\n\n**Casting**\n- Spellcasting + Magic [Force] vs. Drain\n- Drain is Physical for combat spells, Stun for others",
+            "Powers": "**Adept Powers**\n\nInnate magical abilities possessed by adepts. Each power has:\n- Activation type (Passive, Simple Action)\n- Effect\n\n**Special Rules**\n- Powered by Magic attribute\n- No drain but limited by power points",
+            "Foci": "**Foci**\n\nMagical items that enhance or channel magic. Each focus has:\n- Type (Sustaining, Weapon, Spell, etc.)\n- Force (power level)\n\n**Special Rules**\n- Must be bound with karma\n- Can be overloaded or corrupted",
+            "Traditions": "**Magical Traditions**\n\nDifferent approaches to magic:\n- Hermetic (Logic-based)\n- Shamanic (Charisma-based)\n- Christian Theurgy (Willpower-based)\n- Buddhist (Intuition-based)\n\n**Special Rules**\n- Tradition determines drain resistance attribute\n- Affects spirit types that can be summoned",
+            
+            # Vehicle types
+            "Motorcycle": "**Motorcycle**\n\n- Speed: 4\n- Handling: 5\n- Accel: 3\n- Body: 8\n- Armor: 6\n- Pilot: 1\n- Sensor: 1\n- Seats: 2\n- Price: 15,000¥",
+            "Sedan": "**Sedan**\n\n- Speed: 3\n- Handling: 4\n- Accel: 2\n- Body: 12\n- Armor: 10\n- Pilot: 1\n- Sensor: 2\n- Seats: 4\n- Price: 25,000¥",
+            "Sports Car": "**Sports Car**\n\n- Speed: 5\n- Handling: 5\n- Accel: 4\n- Body: 10\n- Armor: 8\n- Pilot: 2\n- Sensor: 3\n- Seats: 2\n- Price: 75,000¥",
+            "Truck": "**Truck**\n\n- Speed: 2\n- Handling: 3\n- Accel: 1\n- Body: 18\n- Armor: 15\n- Pilot: 1\n- Sensor: 1\n- Seats: 3\n- Price: 40,000¥",
+            "Helicopter": "**Helicopter**\n\n- Speed: 4\n- Handling: 4\n- Accel: 2\n- Body: 14\n- Armor: 10\n- Pilot: 3\n- Sensor: 4\n- Seats: 6\n- Price: 200,000¥",
+            "Drone": "**Drone**\n\n- Speed: 3\n- Handling: 4\n- Accel: 2\n- Body: 6\n- Armor: 4\n- Pilot: 1\n- Sensor: 2\n- Seats: 0\n- Price: 10,000¥",
+            
+            # Actions
+            "Free Action": "**Free Action**\n\nCan be performed any time during your turn\n- Speak a few words\n- Drop an item\n- Change gun mode\n- Take a small step",
+            "Simple Action": "**Simple Action**\n\nRequires a simple action\n- Fire a weapon (simple)\n- Cast a spell\n- Make a skill test\n- Move up to walking speed",
+            "Interrupt Action": "**Interrupt Action**\n\nCan be performed outside your turn\n- Defensive actions\n- Dodging\n- Using Edge",
+            "Change Gun Mode": "**Change Gun Mode**\n\nSwitch between firing modes:\n- Single Shot (SS)\n- Semi-Automatic (SA)\n- Burst Fire (BF)\n- Full Automatic (FA)",
+            "Complex Action": "**Complex Action**\n\nRequires significant effort\n- Full attack\n- Complex spell casting\n- Hacking attempt\n- Reloading",
+            "Full Attack": "**Full Attack**\n\nUnleash a powerful attack\n- Add Edge to attack pool\n- Multiple attacks in one action\n- Requires complex action",
+            
+            # Rules
             "Combat": "**Combat Sequence**\n1. Roll initiative\n2. Characters act in initiative order\n3. Repeat for each combat turn\n\n**Actions**\n- Simple Action (1 per turn)\n- Complex Action (1 per turn)\n- Free Action (multiple)",
             "Magic System": "**Magic Rules**\n- Magic Rating determines spell power\n- Drain is physical/stun damage from spellcasting\n- Counterspelling defends against magic\n- Sustaining spells causes penalty",
             "Hacking": "**Matrix Actions**\n- Brute Force (attack)\n- Hack on the Fly (stealth)\n- Matrix Perception (detection)\n\n**Devices**\n- All devices have device rating (1-6)",
             "Vehicles": "**Vehicle Combat**\n- Piloting tests for maneuvers\n- Vehicle stats: Handling, Speed, Accel\n\n**Rigging**\n- Riggers can jump into vehicles directly"
         }
+        
+        # Add content for specific items
+        for category in ShadowrunCharacter.GEAR_CATEGORIES:
+            for item in ShadowrunCharacter.PREDEFINED_GEAR.get(category, []):
+                name = item["name"]
+                content = f"**{name}**\n\n"
+                for key, value in item.items():
+                    if key != "name" and key != "Price":
+                        content += f"- {key}: {value}\n"
+                content += f"\nPrice: {item.get('Price', 'N/A')}¥"
+                wiki_data[name] = content
+                
+        for spell in ShadowrunCharacter.PREDEFINED_SPELLS:
+            name = spell["name"]
+            content = f"**{name}**\n\nType: {spell.get('type', '')}\nDrain: {spell.get('drain', '')}\n\n{spell.get('description', '')}"
+            wiki_data[name] = content
+            
+        for power in ShadowrunCharacter.PREDEFINED_POWERS:
+            name = power["name"]
+            content = f"**{name}**\n\nActivation: {power.get('activation', '')}\nEffect: {power.get('effect', '')}\n\n{power.get('description', '')}"
+            wiki_data[name] = content
+            
+        for focus in ShadowrunCharacter.PREDEFINED_FOCI:
+            name = focus["name"]
+            content = f"**{name}**\n\nType: {focus.get('type', '')}\nForce: {focus.get('force', '')}\n\n{focus.get('description', '')}"
+            wiki_data[name] = content
         
         content = wiki_data.get(category, "No information available for this topic.")
         
@@ -1707,6 +2047,24 @@ class CharacterSheetApp:
         self.edge_action_combo.pack(side=tk.LEFT, padx=5)
         self.edge_action_combo.set("None")
         
+        # Wild Die checkbox
+        self.wild_die_var = tk.BooleanVar()
+        wild_die_check = ttk.Checkbutton(edge_action_frame, text="Use Wild Die", 
+                                        variable=self.wild_die_var)
+        wild_die_check.pack(side=tk.LEFT, padx=10)
+        
+        # Damage penalty info
+        damage_frame = ttk.Frame(dice_frame)
+        damage_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        self.damage_penalty_label = ttk.Label(
+            damage_frame, 
+            text="Damage Penalty: 0", 
+            foreground="#FF5252",  # Red color
+            font=("Arial", 10)
+        )
+        self.damage_penalty_label.pack(anchor=tk.W)
+        
         # Roll button
         btn_frame = ttk.Frame(dice_frame)
         btn_frame.pack(fill=tk.X, padx=10, pady=10)
@@ -1800,6 +2158,11 @@ class CharacterSheetApp:
             self.character.stun_damage,
             "#FFC107",  # Amber color
             "Stun Condition"
+        )
+        
+        # Update damage penalty label
+        self.damage_penalty_label.config(
+            text=f"Damage Penalty: {self.character.damage_penalty}"
         )
     
     def draw_single_monitor(self, canvas, total_boxes, damage, damage_color, title):
@@ -1896,6 +2259,7 @@ class CharacterSheetApp:
                 # Add damage
                 self.character.physical_damage += 1
                 
+            self.character.calculate_derived_stats()
             self.draw_condition_monitors()
     
     def toggle_stun_damage(self, event):
@@ -1919,6 +2283,7 @@ class CharacterSheetApp:
                 # Add damage
                 self.character.stun_damage += 1
                 
+            self.character.calculate_derived_stats()
             self.draw_condition_monitors()
     
     def update_dice_pool_options(self):
@@ -1985,7 +2350,10 @@ class CharacterSheetApp:
         except (ValueError, IndexError):
             pool_size = 0
             
-        result = self.character.roll_dice(pool_size, edge_action)
+        # Get wild die setting
+        use_wild_die = self.wild_die_var.get()
+        
+        result = self.character.roll_dice(pool_size, edge_action, use_wild_die)
         
         # Clear previous results
         self.dice_canvas.delete("all")
@@ -2011,36 +2379,52 @@ class CharacterSheetApp:
         canvas_width = self.dice_canvas.winfo_width()
         start_x = (canvas_width - (dice_width * len(result['dice']) + spacing * (len(result['dice'])-1))) // 2
         
+        # Draw wild die separately if used
+        if result.get('wild_die'):
+            wild_dice = result['wild_die']
+            wild_x = 10
+            for die in wild_dice:
+                y = 40
+                self.draw_die(self.dice_canvas, wild_x, y, dice_width, die, True)
+                wild_x += dice_width + spacing
+        
+        # Draw regular dice
         for i, die in enumerate(result['dice']):
             x = start_x + i * (dice_width + spacing)
             y = 40
             
-            # Draw die background
-            self.dice_canvas.create_rectangle(
-                x, y, x+dice_width, y+dice_width,
-                fill="#444", outline="#666"
+            # Draw die
+            self.draw_die(self.dice_canvas, x, y, dice_width, die)
+    
+    def draw_die(self, canvas, x, y, size, value, is_wild=False):
+        """Draw a single die with visual indicators"""
+        # Draw die background with special color for wild die
+        fill_color = "#4F9BFF" if is_wild else "#444"
+        canvas.create_rectangle(
+            x, y, x+size, y+size,
+            fill=fill_color, outline="#666"
+        )
+        
+        # Draw die value
+        canvas.create_text(
+            x + size/2, y + size/2,
+            text=str(value),
+            fill="white",
+            font=("Arial", 14, "bold")
+        )
+        
+        # Draw hit indicator (5-6)
+        if value >= 5:
+            canvas.create_oval(
+                x+5, y+5, x+10, y+10,
+                fill="#4CAF50", outline=""
             )
-            
-            # Draw die value
-            self.dice_canvas.create_text(
-                x + dice_width/2, y + dice_width/2,
-                text=str(die),
-                fill="white",
-                font=("Arial", 14, "bold")
+        # Draw glitch indicator (1)
+        elif value == 1:
+            canvas.create_oval(
+                x+size-10, y+5, x+size-5, y+10,
+                fill="#F44336", outline=""
             )
-            
-            # Draw hit indicator (5-6)
-            if die >= 5:
-                self.dice_canvas.create_oval(
-                    x+5, y+5, x+10, y+10,
-                    fill="#4CAF50", outline=""
-                )
-            # Draw glitch indicator (1)
-            elif die == 1:
-                self.dice_canvas.create_oval(
-                    x+dice_width-10, y+5, x+dice_width-5, y+10,
-                    fill="#F44336", outline=""
-                )
     
     def get_special_dice_pool(self, dice_pool_text):
         """Get dice pool for spells, powers, or gear"""
@@ -2141,6 +2525,8 @@ class CharacterSheetApp:
         self.nuyen_entry.insert(0, str(self.character.nuyen))
         self.age_spin.delete(0, tk.END)
         self.age_spin.insert(0, str(self.character.age))
+        self.reputation_spin.delete(0, tk.END)
+        self.reputation_spin.insert(0, str(self.character.reputation))
         
         # Attributes
         for attr in ShadowrunCharacter.ATTRIBUTES:
@@ -2181,7 +2567,7 @@ class CharacterSheetApp:
                 tree.delete(item)
             
             for item in self.character.gear[category]:
-                # Format attributes for display
+                # Format details for display - show attributes only
                 attrs = []
                 for key, value in item.items():
                     if key not in ["name", "description"]:
@@ -2213,8 +2599,8 @@ class CharacterSheetApp:
             self.contact_tree.insert("", "end", values=(
                 contact.get("name", "Unknown"),
                 contact.get("type", ""),
-                contact.get("loyalty", 0),
-                contact.get("connection", 0)
+                contact.get("loyalty", ""),
+                contact.get("connection", "")
             ))
         
         # Background
@@ -2229,6 +2615,9 @@ class CharacterSheetApp:
         
         # Update edge display
         self.edge_label.config(text=str(self.character.current_edge))
+        
+        # Update damage penalty display
+        self.damage_penalty_label.config(text=f"Damage Penalty: {self.character.damage_penalty}")
     
     def update_derived_stats(self, event=None):
         # Save current values to character object
@@ -2239,10 +2628,11 @@ class CharacterSheetApp:
         self.character.tradition = self.tradition_combo.get()
         self.character.initiation_grade = int(self.init_grade_spin.get() or "0")
         self.character.lifestyle = self.lifestyle_combo.get()
-        self.character.karma = int(self.karma_spin.get() or "0")
+        self.character.karma = int(self.karma_spin.get() or "50")
         self.character.nuyen = int(self.nuyen_entry.get() or "0")
         self.character.background = self.background_text.get(1.0, tk.END).strip()
         self.character.age = int(self.age_spin.get() or "25")
+        self.character.reputation = int(self.reputation_spin.get() or "0")
         
         for attr in ShadowrunCharacter.ATTRIBUTES:
             try:
