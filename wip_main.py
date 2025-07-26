@@ -96,6 +96,15 @@ class ShadowrunCharacter:
     CONTACT_TYPES = ["Fixer", "Johnson", "Gang", "Corporate", "Police", "Media", "Talislegger", "Decker", "Street Doc"]
     LOYALTY_LEVELS = [str(i) for i in range(1, 7)]  # 1-6
     
+    # Edge actions and costs
+    EDGE_ACTIONS = {
+        "Reroll Non-Hits (1 Edge)": 1,
+        "Seal Fate (1 Edge)": 1,
+        "Push the Limit (4 Edge)": 4,
+        "Heroic Effort (3 Edge)": 3,
+        "Battle Hardened (2 Edge)": 2
+    }
+    
     # Dice roll options
     DICE_ROLL_OPTIONS = [
         "Attack (Physical)",
@@ -134,6 +143,7 @@ class ShadowrunCharacter:
         self.attributes["Edge"] = 1
         self.attributes["Essence"] = 6.0
         self.base_attributes = self.attributes.copy()  # Store base attributes without bonuses
+        self.current_edge = self.attributes["Edge"]  # Track current Edge points
         
         # Skills
         self.skills = {skill: 0 for skill in self.SKILLS}
@@ -253,26 +263,42 @@ class ShadowrunCharacter:
         # Recalculate derived stats
         self.calculate_derived_stats()
     
-    def roll_dice(self, pool_size, edge_use=0):
-        """Roll dice for Shadowrun system"""
+    def roll_dice(self, pool_size, edge_action=None):
+        """Roll dice for Shadowrun system with edge options"""
         if pool_size <= 0:
             return {"dice": [], "hits": 0, "glitch": False, "critical_glitch": False}
         
-        # Use Edge for re-rolls
-        rerolls = edge_use
-        dice = []
-        while rerolls >= 0 and pool_size > 0:
-            rolls = [random.randint(1, 6) for _ in range(pool_size)]
-            dice.extend(rolls)
-            
-            # If we're using Edge, re-roll non-5s and non-6s
-            if rerolls > 0:
-                pool_size = sum(1 for r in rolls if r < 5)
-                rerolls -= 1
-            else:
-                break
+        # Handle edge actions
+        extra_hits = 0
+        reroll_non_hits = False
+        if edge_action:
+            if edge_action == "Reroll Non-Hits (1 Edge)":
+                reroll_non_hits = True
+            elif edge_action == "Seal Fate (1 Edge)":
+                # Reroll any number of dice
+                pass  # Not implemented yet
+            elif edge_action == "Push the Limit (4 Edge)":
+                # Add Edge attribute to dice pool
+                pool_size += self.attributes["Edge"]
+            elif edge_action == "Heroic Effort (3 Edge)":
+                # Buy automatic hits
+                extra_hits = min(3, self.current_edge)  # Max 3 automatic hits
+            elif edge_action == "Battle Hardened (2 Edge)":
+                # Add Edge to defense tests
+                pass  # Not implemented yet
         
-        hits = sum(1 for r in dice if r >= 5)
+        dice = []
+        if not edge_action or edge_action != "Heroic Effort (3 Edge)":
+            # Roll initial dice
+            dice = [random.randint(1, 6) for _ in range(pool_size)]
+            
+            # Reroll non-hits if selected
+            if reroll_non_hits:
+                non_hits = [r for r in dice if r < 5]
+                rerolled = [random.randint(1, 6) for _ in non_hits]
+                dice = [r for r in dice if r >= 5] + rerolled
+        
+        hits = sum(1 for r in dice if r >= 5) + extra_hits
         ones = sum(1 for r in dice if r == 1)
         total_dice = len(dice)
         
@@ -307,35 +333,50 @@ class ShadowrunCharacter:
         # Use the first medkit in the list
         medkit = self.gear["Medkits"][0]
         
-        # Extract rating from name if possible
+        # Extract rating from medkit (stored as 'Rating' attribute)
         rating = 1
         if "Rating" in medkit:
             try:
-                rating = int(medkit["Rating"].split()[1])
+                # Extract numeric value from string like "Rating 3"
+                rating_str = medkit["Rating"]
+                if " " in rating_str:
+                    rating = int(rating_str.split()[1])
+                else:
+                    rating = int(rating_str)
             except (ValueError, IndexError):
                 pass
         
-        # Apply healing
+        # Apply healing (p.220-221)
         self.heal_damage("physical", rating * 2)
         self.heal_damage("stun", rating)
         
-        # Decrement quantity if it exists
+        # Handle quantity
+        quantity = 1
         if "Quantity" in medkit:
-            quantity = int(medkit["Quantity"])
-            if quantity > 1:
-                medkit["Quantity"] = str(quantity - 1)
-            else:
-                # Remove if last one
-                self.gear["Medkits"].pop(0)
-        else:
-            # Single-use medkit
+            try:
+                quantity = int(medkit["Quantity"])
+            except ValueError:
+                pass
+        
+        # Decrement quantity
+        quantity -= 1
+        
+        if quantity <= 0:
+            # Remove medkit if no uses left
             self.gear["Medkits"].pop(0)
+        else:
+            # Update quantity
+            medkit["Quantity"] = str(quantity)
             
         return True
     
     def rest(self):
         """Rest to recover stun damage"""
         self.heal_damage("stun", 1)
+    
+    def reset_edge(self):
+        """Reset current Edge to maximum value"""
+        self.current_edge = self.attributes["Edge"]
     
     def to_dict(self):
         return {
@@ -366,7 +407,8 @@ class ShadowrunCharacter:
             "initiative_score": self.initiative_score,
             "initiative_dice": self.initiative_dice,
             "physical_damage": self.physical_damage,
-            "stun_damage": self.stun_damage
+            "stun_damage": self.stun_damage,
+            "current_edge": self.current_edge
         }
     
     def from_dict(self, data):
@@ -377,6 +419,10 @@ class ShadowrunCharacter:
         # Set base attributes if not present in saved data
         if not hasattr(self, 'base_attributes'):
             self.base_attributes = self.attributes.copy()
+            
+        # Ensure current_edge exists
+        if not hasattr(self, 'current_edge'):
+            self.current_edge = self.attributes["Edge"]
             
         self.calculate_derived_stats()
         return self
@@ -471,8 +517,8 @@ class EditGearDialog(tk.Toplevel):
                 # Create combobox for attributes with predefined options
                 entry = ttk.Combobox(main_frame, values=options, width=15)
                 entry.set(self.item.get(attr, options[0]))
-            elif attr == "Quantity":
-                # Create spinbox for quantity
+            elif attr == "Quantity" or attr == "Rating":
+                # Create spinbox for quantity and rating
                 entry = ttk.Spinbox(main_frame, from_=1, to=100, width=15)
                 entry.set(str(self.item.get(attr, "1")))
             else:
@@ -1172,7 +1218,7 @@ class CharacterSheetApp:
         
         # Foci
         foci_frame = ttk.Frame(notebook)
-        notebook.add(foci_frame, text="Foci")
+        notebook.add(foci_frame, text="Focus")
         
         # Foci list with description
         foci_list_frame = ttk.Frame(foci_frame)
@@ -1521,6 +1567,16 @@ class CharacterSheetApp:
         ttk.Button(heal_frame, text="Use Medkit", command=self.use_medkit).pack(side=tk.LEFT, padx=5, pady=5)
         ttk.Button(heal_frame, text="Rest", command=self.rest).pack(side=tk.LEFT, padx=5, pady=5)
         
+        # Edge tracker
+        edge_frame = ttk.LabelFrame(actions_frame, text="Edge")
+        edge_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(edge_frame, text="Current Edge:").pack(side=tk.LEFT, padx=5)
+        self.edge_label = ttk.Label(edge_frame, text="1", font=("Arial", 10, "bold"))
+        self.edge_label.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(edge_frame, text="Reset Edge", command=self.reset_edge).pack(side=tk.LEFT, padx=5)
+        
         # Dice roller
         dice_frame = ttk.Frame(notebook)
         notebook.add(dice_frame, text="Dice Roller")
@@ -1538,14 +1594,14 @@ class CharacterSheetApp:
         self.dice_pool_combo = ttk.Combobox(roll_frame, width=25)
         self.dice_pool_combo.pack(side=tk.LEFT, padx=5)
         
-        # Edge use
-        edge_frame = ttk.Frame(dice_frame)
-        edge_frame.pack(fill=tk.X, padx=10, pady=5)
+        # Edge actions
+        edge_action_frame = ttk.Frame(dice_frame)
+        edge_action_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ttk.Label(edge_frame, text="Use Edge:").pack(side=tk.LEFT, padx=5)
-        self.edge_spin = ttk.Spinbox(edge_frame, from_=0, to=3, width=2)
-        self.edge_spin.pack(side=tk.LEFT, padx=5)
-        self.edge_spin.set("0")
+        ttk.Label(edge_action_frame, text="Edge Action:").pack(side=tk.LEFT, padx=5)
+        self.edge_action_combo = ttk.Combobox(edge_action_frame, values=list(ShadowrunCharacter.EDGE_ACTIONS.keys()), width=30)
+        self.edge_action_combo.pack(side=tk.LEFT, padx=5)
+        self.edge_action_combo.set("None")
         
         # Roll button
         btn_frame = ttk.Frame(dice_frame)
@@ -1794,8 +1850,23 @@ class CharacterSheetApp:
             self.dice_pool_combo.set(options[0])
     
     def roll_dice(self):
-        # Update edge max value
-        self.edge_spin.config(to=self.character.attributes["Edge"])
+        # Get selected edge action
+        edge_action_name = self.edge_action_combo.get()
+        edge_action = edge_action_name if edge_action_name != "None" else None
+        
+        # Get edge cost
+        edge_cost = 0
+        if edge_action:
+            edge_cost = ShadowrunCharacter.EDGE_ACTIONS.get(edge_action_name, 0)
+            
+            # Check if character has enough edge
+            if self.character.current_edge < edge_cost:
+                messagebox.showwarning("Not Enough Edge", f"Not enough Edge points for {edge_action_name}!")
+                return
+                
+            # Deduct edge cost
+            self.character.current_edge -= edge_cost
+            self.edge_label.config(text=str(self.character.current_edge))
         
         try:
             # Parse dice pool from combo selection
@@ -1808,14 +1879,7 @@ class CharacterSheetApp:
         except (ValueError, IndexError):
             pool_size = 0
             
-        edge_use = int(self.edge_spin.get() or "0")
-        
-        # Validate edge usage
-        if edge_use > 0 and self.character.attributes["Edge"] <= 0:
-            messagebox.showwarning("No Edge", "Character has no Edge points available!")
-            return
-        
-        result = self.character.roll_dice(pool_size, edge_use)
+        result = self.character.roll_dice(pool_size, edge_action)
         
         # Clear previous results
         self.dice_canvas.delete("all")
@@ -1948,6 +2012,11 @@ class CharacterSheetApp:
         self.draw_condition_monitors()
         messagebox.showinfo("Rest", "Character rested. Stun damage reduced by 1.")
     
+    def reset_edge(self):
+        self.character.reset_edge()
+        self.edge_label.config(text=str(self.character.current_edge))
+        messagebox.showinfo("Edge Reset", "Edge points reset to maximum!")
+    
     def update_all_fields(self):
         # Basic Info
         self.name_entry.delete(0, tk.END)
@@ -2049,6 +2118,9 @@ class CharacterSheetApp:
         
         # Update dice pool options
         self.update_dice_pool_options()
+        
+        # Update edge display
+        self.edge_label.config(text=str(self.character.current_edge))
     
     def update_derived_stats(self, event=None):
         # Save current values to character object
@@ -2085,6 +2157,9 @@ class CharacterSheetApp:
         
         # Update dice pool options
         self.update_dice_pool_options()
+        
+        # Update edge display
+        self.edge_label.config(text=str(self.character.current_edge))
     
     def new_character(self):
         self.character.reset_character()
