@@ -301,26 +301,37 @@ class ShadowrunCharacter:
     
     def use_medkit(self):
         """Use a medkit to heal damage if available"""
-        for i, item in enumerate(self.gear["Medkits"]):
-            if "Medkit" in item.get("name", ""):
-                rating = item.get("Rating", 1)
-                # Check if it's a stackable medkit with quantity
-                if "Quantity" in item:
-                    quantity = int(item["Quantity"])
-                    if quantity > 1:
-                        # Decrement quantity
-                        self.gear["Medkits"][i]["Quantity"] = str(quantity - 1)
-                    else:
-                        # Remove if last one
-                        del self.gear["Medkits"][i]
-                else:
-                    # Single-use medkit
-                    del self.gear["Medkits"][i]
-                    
-                self.heal_damage("physical", rating * 2)
-                self.heal_damage("stun", rating)
-                return True
-        return False
+        if not self.gear["Medkits"]:
+            return False
+            
+        # Use the first medkit in the list
+        medkit = self.gear["Medkits"][0]
+        
+        # Extract rating from name if possible
+        rating = 1
+        if "Rating" in medkit:
+            try:
+                rating = int(medkit["Rating"].split()[1])
+            except (ValueError, IndexError):
+                pass
+        
+        # Apply healing
+        self.heal_damage("physical", rating * 2)
+        self.heal_damage("stun", rating)
+        
+        # Decrement quantity if it exists
+        if "Quantity" in medkit:
+            quantity = int(medkit["Quantity"])
+            if quantity > 1:
+                medkit["Quantity"] = str(quantity - 1)
+            else:
+                # Remove if last one
+                self.gear["Medkits"].pop(0)
+        else:
+            # Single-use medkit
+            self.gear["Medkits"].pop(0)
+            
+        return True
     
     def rest(self):
         """Rest to recover stun damage"""
@@ -413,8 +424,7 @@ class EditGearDialog(tk.Toplevel):
         ("Weapons", "Type"): ShadowrunCharacter.WEAPON_TYPES,
         ("Armor", "Type"): ShadowrunCharacter.ARMOR_TYPES,
         ("Cyberware", "Type"): ShadowrunCharacter.CYBERWARE_TYPES,
-        ("Medkits", "Type"): ShadowrunCharacter.MEDKIT_TYPES,
-        ("Medkits", "Quantity"): [str(i) for i in range(1, 11)]
+        ("Medkits", "Type"): ShadowrunCharacter.MEDKIT_TYPES
     }
     
     def __init__(self, parent, category, item=None):
@@ -461,6 +471,10 @@ class EditGearDialog(tk.Toplevel):
                 # Create combobox for attributes with predefined options
                 entry = ttk.Combobox(main_frame, values=options, width=15)
                 entry.set(self.item.get(attr, options[0]))
+            elif attr == "Quantity":
+                # Create spinbox for quantity
+                entry = ttk.Spinbox(main_frame, from_=1, to=100, width=15)
+                entry.set(str(self.item.get(attr, "1")))
             else:
                 # Create regular entry field
                 entry = ttk.Entry(main_frame, width=15)
@@ -545,7 +559,7 @@ class EditContactDialog(tk.Toplevel):
         fields = [
             ("Name:", "name", "entry"),
             ("Type:", "type", "combo"),
-            ("Loyalty:", "loyalty", "combo"),
+            ("Loyalty:", "loyalty", "spin"),
             ("Connection:", "connection", "entry"),
             ("Notes:", "notes", "text")
         ]
@@ -564,8 +578,11 @@ class EditContactDialog(tk.Toplevel):
                 entry = ttk.Combobox(main_frame, width=27)
                 if key == "type":
                     entry["values"] = ShadowrunCharacter.CONTACT_TYPES
-                elif key == "loyalty":
-                    entry["values"] = ShadowrunCharacter.LOYALTY_LEVELS
+                entry.grid(row=i, column=1, sticky=tk.W, padx=5, pady=5)
+                if self.contact.get(key):
+                    entry.set(self.contact[key])
+            elif field_type == "spin":
+                entry = ttk.Spinbox(main_frame, from_=1, to=6, width=5)
                 entry.grid(row=i, column=1, sticky=tk.W, padx=5, pady=5)
                 if self.contact.get(key):
                     entry.set(self.contact[key])
@@ -587,7 +604,7 @@ class EditContactDialog(tk.Toplevel):
     def save(self):
         result = {}
         for key, widget in self.entries.items():
-            if isinstance(widget, (ttk.Entry, ttk.Combobox)):
+            if isinstance(widget, (ttk.Entry, ttk.Combobox, ttk.Spinbox)):
                 result[key] = widget.get()
             else:  # ScrolledText
                 result[key] = widget.get("1.0", tk.END).strip()
@@ -829,16 +846,17 @@ class CharacterSheetApp:
         skill_frame = ttk.LabelFrame(left_frame, text="Skills")
         skill_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        self.skill_tree = ttk.Treeview(skill_frame, columns=("Rank", "Spec"), show="headings", height=15)
-        self.skill_tree.heading("#0", text="Skill")
+        # Updated treeview with three columns: Skill, Specialization, Rank
+        self.skill_tree = ttk.Treeview(skill_frame, columns=("Skill", "Specialization", "Rank"), show="headings", height=15)
+        self.skill_tree.heading("Skill", text="Skill")
+        self.skill_tree.heading("Specialization", text="Specialization")
         self.skill_tree.heading("Rank", text="Rank")
-        self.skill_tree.heading("Spec", text="Specialization")
-        self.skill_tree.column("#0", width=150)
+        self.skill_tree.column("Skill", width=150)
+        self.skill_tree.column("Specialization", width=150)
         self.skill_tree.column("Rank", width=50)
-        self.skill_tree.column("Spec", width=150)
         
         for skill in ShadowrunCharacter.SKILLS:
-            self.skill_tree.insert("", "end", text=skill, values=(0, ""))
+            self.skill_tree.insert("", "end", values=(skill, "", 0))
         
         self.skill_tree.pack(fill=tk.BOTH, expand=True)
         self.skill_tree.bind("<<TreeviewSelect>>", self.update_specialization_list)
@@ -871,7 +889,9 @@ class CharacterSheetApp:
         if not selected:
             return
             
-        skill = self.skill_tree.item(selected[0], "text")
+        item = self.skill_tree.item(selected[0])
+        values = item["values"]
+        skill = values[0]
         specializations = ShadowrunCharacter.SKILL_SPECIALIZATIONS.get(skill, [])
         
         # Add "None" option and set as default
@@ -899,7 +919,9 @@ class CharacterSheetApp:
     def update_skill(self):
         selected = self.skill_tree.selection()
         if selected:
-            skill = self.skill_tree.item(selected[0], "text")
+            item = self.skill_tree.item(selected[0])
+            values = item["values"]
+            skill = values[0]
             rank = int(self.skill_rank_spin.get())
             spec = self.skill_spec_combo.get()
             
@@ -909,7 +931,7 @@ class CharacterSheetApp:
             elif skill in self.character.specializations:
                 del self.character.specializations[skill]
             
-            self.skill_tree.item(selected[0], values=(rank, spec))
+            self.skill_tree.item(selected[0], values=(skill, spec, rank))
             self.update_specialization_list()
     
     def setup_qualities_tab(self):
@@ -1967,7 +1989,7 @@ class CharacterSheetApp:
         
         for skill, rank in self.character.skills.items():
             spec = self.character.specializations.get(skill, "")
-            self.skill_tree.insert("", "end", text=skill, values=(rank, spec))
+            self.skill_tree.insert("", "end", values=(skill, spec, rank))
         
         # Qualities
         self.cur_quality_list.delete(0, tk.END)
