@@ -86,10 +86,11 @@ class ShadowrunCharacter:
         "Incompetent": {"Logic": -1, "Intuition": -1}
     }
     
-    GEAR_CATEGORIES = ["Weapons", "Armor", "Cyberware", "Bioware", "Magic Items", "Electronics", "Other"]
+    GEAR_CATEGORIES = ["Weapons", "Armor", "Cyberware", "Bioware", "Magic Items", "Electronics", "Medkits", "Other"]
     WEAPON_TYPES = ["Blades", "Clubs", "Thrown", "Pistols", "Rifles", "Shotguns", "Machine Guns", "Special"]
     ARMOR_TYPES = ["Clothing", "Armor Jacket", "Full Body Armor", "Helmet", "Shield"]
     CYBERWARE_TYPES = ["Headware", "Eyeware", "Earware", "Bodyware", "Cyberlimbs", "Implants"]
+    MEDKIT_TYPES = ["Rating 1", "Rating 3", "Rating 6", "Rating 10"]
     
     # Contact types and loyalty levels
     CONTACT_TYPES = ["Fixer", "Johnson", "Gang", "Corporate", "Police", "Media", "Talislegger", "Decker", "Street Doc"]
@@ -300,9 +301,22 @@ class ShadowrunCharacter:
     
     def use_medkit(self):
         """Use a medkit to heal damage if available"""
-        for item in self.gear["Bioware"] + self.gear["Electronics"] + self.gear["Other"]:
+        for i, item in enumerate(self.gear["Medkits"]):
             if "Medkit" in item.get("name", ""):
                 rating = item.get("Rating", 1)
+                # Check if it's a stackable medkit with quantity
+                if "Quantity" in item:
+                    quantity = int(item["Quantity"])
+                    if quantity > 1:
+                        # Decrement quantity
+                        self.gear["Medkits"][i]["Quantity"] = str(quantity - 1)
+                    else:
+                        # Remove if last one
+                        del self.gear["Medkits"][i]
+                else:
+                    # Single-use medkit
+                    del self.gear["Medkits"][i]
+                    
                 self.heal_damage("physical", rating * 2)
                 self.heal_damage("stun", rating)
                 return True
@@ -385,13 +399,22 @@ class DescriptionViewer(tk.Toplevel):
 
 class EditGearDialog(tk.Toplevel):
     GEAR_ATTRIBUTES = {
-        "Weapons": ["Damage", "Accuracy", "AP", "Mode", "RC", "Ammo"],
-        "Armor": ["Rating", "Social", "Capacity"],
-        "Cyberware": ["Essence Cost", "Capacity", "Rating"],
-        "Bioware": ["Essence Cost", "Rating", "Capacity"],
+        "Weapons": ["Damage", "Accuracy", "AP", "Mode", "RC", "Ammo", "Type"],
+        "Armor": ["Rating", "Social", "Capacity", "Type"],
+        "Cyberware": ["Essence Cost", "Capacity", "Rating", "Type"],
+        "Bioware": ["Essence Cost", "Rating", "Capacity", "Type"],
         "Magic Items": ["Force", "Type", "Binding"],
+        "Medkits": ["Rating", "Quantity", "Type"],
         "Electronics": ["Rating", "Capacity", "Function"],
         "Other": ["Effect", "Duration", "Potency"]
+    }
+    
+    GEAR_OPTIONS = {
+        ("Weapons", "Type"): ShadowrunCharacter.WEAPON_TYPES,
+        ("Armor", "Type"): ShadowrunCharacter.ARMOR_TYPES,
+        ("Cyberware", "Type"): ShadowrunCharacter.CYBERWARE_TYPES,
+        ("Medkits", "Type"): ShadowrunCharacter.MEDKIT_TYPES,
+        ("Medkits", "Quantity"): [str(i) for i in range(1, 11)]
     }
     
     def __init__(self, parent, category, item=None):
@@ -431,9 +454,19 @@ class EditGearDialog(tk.Toplevel):
         self.attr_entries = {}
         for attr in self.GEAR_ATTRIBUTES.get(self.category, []):
             ttk.Label(main_frame, text=f"{attr}:").grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
-            entry = ttk.Entry(main_frame, width=15)
+            
+            # Check if this attribute should be a dropdown
+            options = self.GEAR_OPTIONS.get((self.category, attr))
+            if options:
+                # Create combobox for attributes with predefined options
+                entry = ttk.Combobox(main_frame, values=options, width=15)
+                entry.set(self.item.get(attr, options[0]))
+            else:
+                # Create regular entry field
+                entry = ttk.Entry(main_frame, width=15)
+                entry.insert(0, str(self.item.get(attr, "")))
+                
             entry.grid(row=row, column=1, sticky=tk.W, padx=5, pady=2)
-            entry.insert(0, str(self.item.get(attr, "")))
             self.attr_entries[attr] = entry
             row += 1
         
@@ -470,8 +503,8 @@ class EditGearDialog(tk.Toplevel):
         
         # Get standard attributes
         attributes = {}
-        for attr, entry in self.attr_entries.items():
-            value = entry.get().strip()
+        for attr, widget in self.attr_entries.items():
+            value = widget.get().strip()
             if value:
                 attributes[attr] = value
         
@@ -721,16 +754,16 @@ class CharacterSheetApp:
         self.attribute_vars = {}
         self.attribute_entries = {}
         
-        # Use a grid layout with 4 columns per row
+        # Use a grid layout with 3 columns per row for more space
         for i, attr in enumerate(ShadowrunCharacter.ATTRIBUTES):
-            row = i // 4
-            col = (i % 4) * 2
+            row = i // 3
+            col = (i % 3) * 2
             
-            ttk.Label(attr_frame, text=f"{attr}:").grid(row=row, column=col, sticky=tk.W, padx=5, pady=2)
+            ttk.Label(attr_frame, text=f"{attr}:").grid(row=row, column=col, sticky=tk.W, padx=15, pady=5)  # Increased padding
             
             var = tk.IntVar()
-            entry = ttk.Spinbox(attr_frame, from_=1, to=10, width=3, textvariable=var)
-            entry.grid(row=row, column=col+1, padx=(0, 15), pady=2)  # Add right padding
+            entry = ttk.Spinbox(attr_frame, from_=1, to=10, width=5, textvariable=var)  # Wider spinbox
+            entry.grid(row=row, column=col+1, padx=(0, 15), pady=5)  # More padding
             entry.bind("<FocusOut>", self.update_derived_stats)
             
             self.attribute_vars[attr] = var
@@ -738,12 +771,12 @@ class CharacterSheetApp:
             
             # Add label for metatype bonus - place in next column with spacing
             bonus_label = ttk.Label(attr_frame, text="", foreground="#4F9BFF")
-            bonus_label.grid(row=row, column=col+2, padx=(0, 10), pady=2)
+            bonus_label.grid(row=row, column=col+2, padx=(0, 10), pady=5)
             setattr(self, f"{attr.lower()}_bonus_label", bonus_label)
         
         # Auto Roll button
         ttk.Button(attr_frame, text="Auto Roll Attributes", command=self.autoroll_attributes).grid(
-            row=row+1, column=0, columnspan=8, pady=10
+            row=row+1, column=0, columnspan=6, pady=15
         )
     
     def autoroll_attributes(self):
@@ -1498,14 +1531,26 @@ class CharacterSheetApp:
         
         ttk.Button(btn_frame, text="Roll Dice", command=self.roll_dice).pack()
         
-        # Results display
+        # Results display - more visual representation
         result_frame = ttk.LabelFrame(dice_frame, text="Results")
         result_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        self.result_text = scrolledtext.ScrolledText(result_frame, height=10, 
-                                                   bg="#333", fg="#e0e0e0", wrap=tk.WORD)
-        self.result_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        self.result_text.config(state=tk.DISABLED)
+        # Canvas for dice visualization
+        self.dice_canvas = tk.Canvas(result_frame, bg="#333", height=100)
+        self.dice_canvas.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Results labels
+        self.result_frame = ttk.Frame(result_frame)
+        self.result_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.hits_label = ttk.Label(self.result_frame, text="Hits: 0", font=("Arial", 12, "bold"))
+        self.hits_label.pack(side=tk.LEFT, padx=10)
+        
+        self.glitch_label = ttk.Label(self.result_frame, text="", font=("Arial", 12))
+        self.glitch_label.pack(side=tk.LEFT, padx=10)
+        
+        self.success_label = ttk.Label(self.result_frame, text="", font=("Arial", 14, "bold"))
+        self.success_label.pack(side=tk.LEFT, padx=10)
         
         # Combat stats
         stats_frame = ttk.Frame(notebook)
@@ -1750,33 +1795,60 @@ class CharacterSheetApp:
         
         result = self.character.roll_dice(pool_size, edge_use)
         
-        self.result_text.config(state=tk.NORMAL)
-        self.result_text.delete(1.0, tk.END)
+        # Clear previous results
+        self.dice_canvas.delete("all")
+        self.hits_label.config(text=f"Hits: {result['hits']}")
         
-        roll_type = self.roll_combo.get()
-        self.result_text.insert(tk.END, f"Rolling {roll_type} ({pool_size} dice, Edge {edge_use}):\n")
-        self.result_text.insert(tk.END, f"Dice: {', '.join(map(str, result['dice']))}\n")
-        
+        # Set status text
         if result['critical_glitch']:
-            self.result_text.insert(tk.END, "CRITICAL GLITCH! ", "critical")
-            self.result_text.insert(tk.END, "No successes and more than half are 1s\n")
+            self.glitch_label.config(text="CRITICAL GLITCH!", foreground="#F44336")
+            self.success_label.config(text="FAILURE", foreground="#F44336")
         elif result['glitch']:
-            self.result_text.insert(tk.END, "GLITCH! ", "glitch")
-            self.result_text.insert(tk.END, "More than half of dice are 1s\n")
-        
-        self.result_text.insert(tk.END, f"Successes: {result['hits']}\n")
-        
-        # Color the results
-        self.result_text.tag_config("success", foreground="#4CAF50")
-        self.result_text.tag_config("glitch", foreground="#FF9800")
-        self.result_text.tag_config("critical", foreground="#F44336")
-        
-        if result['hits'] > 0:
-            self.result_text.insert(tk.END, "SUCCESS!", "success")
+            self.glitch_label.config(text="GLITCH!", foreground="#FF9800")
+            self.success_label.config(text="FAILURE", foreground="#F44336")
         else:
-            self.result_text.insert(tk.END, "FAILURE", "critical")
+            self.glitch_label.config(text="")
+            if result['hits'] > 0:
+                self.success_label.config(text="SUCCESS!", foreground="#4CAF50")
+            else:
+                self.success_label.config(text="FAILURE", foreground="#F44336")
         
-        self.result_text.config(state=tk.DISABLED)
+        # Visual dice representation
+        dice_width = 30
+        spacing = 5
+        canvas_width = self.dice_canvas.winfo_width()
+        start_x = (canvas_width - (dice_width * len(result['dice']) + spacing * (len(result['dice'])-1))) // 2
+        
+        for i, die in enumerate(result['dice']):
+            x = start_x + i * (dice_width + spacing)
+            y = 40
+            
+            # Draw die background
+            self.dice_canvas.create_rectangle(
+                x, y, x+dice_width, y+dice_width,
+                fill="#444", outline="#666"
+            )
+            
+            # Draw die value
+            self.dice_canvas.create_text(
+                x + dice_width/2, y + dice_width/2,
+                text=str(die),
+                fill="white",
+                font=("Arial", 14, "bold")
+            )
+            
+            # Draw hit indicator (5-6)
+            if die >= 5:
+                self.dice_canvas.create_oval(
+                    x+5, y+5, x+10, y+10,
+                    fill="#4CAF50", outline=""
+                )
+            # Draw glitch indicator (1)
+            elif die == 1:
+                self.dice_canvas.create_oval(
+                    x+dice_width-10, y+5, x+dice_width-5, y+10,
+                    fill="#F44336", outline=""
+                )
     
     def get_special_dice_pool(self, dice_pool_text):
         """Get dice pool for spells, powers, or gear"""
@@ -1836,6 +1908,16 @@ class CharacterSheetApp:
         if self.character.use_medkit():
             self.draw_condition_monitors()
             messagebox.showinfo("Medkit Used", "Medkit applied! Physical and stun damage reduced.")
+            # Update gear display
+            for item in self.medkits_tree.get_children():
+                self.medkits_tree.delete(item)
+            for item in self.character.gear["Medkits"]:
+                attrs = []
+                for key, value in item.items():
+                    if key not in ["name", "description"]:
+                        attrs.append(f"{key}: {value}")
+                details = "; ".join(attrs)
+                self.medkits_tree.insert("", "end", text=item.get("name", "Unknown"), values=(details,))
         else:
             messagebox.showwarning("No Medkit", "No medkit found in your gear!")
     
