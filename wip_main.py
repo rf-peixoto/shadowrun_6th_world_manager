@@ -94,7 +94,7 @@ class ShadowrunCharacter:
     
     # Contact types and loyalty levels
     CONTACT_TYPES = ["Fixer", "Johnson", "Gang", "Corporate", "Police", "Media", "Talislegger", "Decker", "Street Doc"]
-    LOYALTY_LEVELS = [str(i) for i in range(1, 7)]  # 1-6
+    LOYALTY_LEVELS = ["Unknown", "Known", "Transactional", "Regular", "Professional", "Respectful", "Reliable", "Supportive", "Loyal", "Devoted", "Family"]
     
     # Edge actions and costs
     EDGE_ACTIONS = {
