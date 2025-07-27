@@ -5,7 +5,7 @@
 ```
 bc1q7e3mf5nwmjk9sw8thy35s9r7rq27ta7lzj0d7l
 ```
-##### Happy rolep laying.
+##### Happy role playing.
 ---
 
 *Shadowrun is a trademark of Catalyst Game Labs. This project is not officially affiliated with Catalyst Game Labs or The Topps Company.*
