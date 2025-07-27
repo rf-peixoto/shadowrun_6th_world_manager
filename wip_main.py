@@ -74,16 +74,24 @@ class ShadowrunCharacter:
                     "Social Stress", "Spirit Bane", "Uncouth", "Uneducated"]
     }
     
-    # Qualities with attribute effects
+    # Qualities with attribute effects and karma costs
     QUALITY_EFFECTS = {
-        "Analytical Mind": {"Logic": 1},
-        "Toughness": {"Body": 1},
-        "Indomitable": {"Willpower": 1},
-        "Ambidextrous": {"Agility": 1},
-        "Natural Athlete": {"Strength": 1, "Agility": 1},
-        "Uncouth": {"Charisma": -2},
-        "Uneducated": {"Logic": -2},
-        "Incompetent": {"Logic": -1, "Intuition": -1}
+        "Analytical Mind": {"Logic": 1, "karma": 7},
+        "Toughness": {"Body": 1, "karma": 9},
+        "Indomitable": {"Willpower": 1, "karma": 8},
+        "Ambidextrous": {"Agility": 1, "karma": 6},
+        "Natural Athlete": {"Strength": 1, "Agility": 1, "karma": 10},
+        "Uncouth": {"Charisma": -2, "karma": -12},
+        "Uneducated": {"Logic": -2, "karma": -10},
+        "Incompetent": {"Logic": -1, "Intuition": -1, "karma": -14},
+        "High Pain Tolerance": {"karma": 7},
+        "Lucky": {"karma": 12},
+        "Guts": {"karma": 8},
+        "Catlike": {"Agility": 1, "karma": 9},
+        "Addiction": {"karma": -8},
+        "Allergy": {"karma": -10},
+        "Bad Luck": {"karma": -12},
+        "Bad Rep": {"karma": -7}
     }
     
     GEAR_CATEGORIES = ["Weapons", "Armor", "Cyberware", "Bioware", "Magic Items", "Electronics", "Medkits", "Other"]
@@ -188,6 +196,18 @@ class ShadowrunCharacter:
         "Hack Device", "Pilot Vehicle", "Full Defense", "Overwatch"
     ]
     
+    # Matrix icons
+    MATRIX_ICONS = {
+        "Player": "blue_circle",
+        "Enemy": "red_triangle",
+        "Device": "yellow_square",
+        "Barrier": "black_diamond",
+        "Data": "green_star",
+        "IC": "orange_hexagon",
+        "Node": "purple_circle",
+        "Host": "cyan_square"
+    }
+    
     def __init__(self):
         self.reset_character()
         
@@ -230,6 +250,9 @@ class ShadowrunCharacter:
         self.complex_forms = []
         self.foci = []    # Now stored as dictionaries: {"name": "", "description": "", "type": "", "force": 0}
         
+        # Matrix state
+        self.matrix_grid = {}  # Stores matrix elements: {(x, y): {"type": "", "label": ""}}
+        
         # Combat stats
         self.physical_damage = 0
         self.stun_damage = 0
@@ -265,7 +288,8 @@ class ShadowrunCharacter:
         for quality in self.qualities:
             if quality in self.QUALITY_EFFECTS:
                 for attr, bonus in self.QUALITY_EFFECTS[quality].items():
-                    self.attributes[attr] = max(1, self.attributes[attr] + bonus)
+                    if attr != "karma":  # Skip karma entry
+                        self.attributes[attr] = max(1, self.attributes[attr] + bonus)
         
         # Condition monitors (p.39)
         body = self.attributes["Body"]
@@ -346,12 +370,14 @@ class ShadowrunCharacter:
         # Handle edge actions
         extra_hits = 0
         reroll_non_hits = False
+        seal_fate = False
+        battle_hardened = False
+        
         if edge_action:
             if edge_action == "Reroll Non-Hits (1 Edge)":
                 reroll_non_hits = True
             elif edge_action == "Seal Fate (1 Edge)":
-                # Reroll any number of dice
-                pass  # Not implemented yet
+                seal_fate = True
             elif edge_action == "Push the Limit (4 Edge)":
                 # Add Edge attribute to dice pool
                 pool_size += self.attributes["Edge"]
@@ -359,8 +385,7 @@ class ShadowrunCharacter:
                 # Buy automatic hits
                 extra_hits = min(3, self.current_edge)  # Max 3 automatic hits
             elif edge_action == "Battle Hardened (2 Edge)":
-                # Add Edge to defense tests
-                pass  # Not implemented yet
+                battle_hardened = True
         
         dice = []
         wild_die_result = None
@@ -394,6 +419,12 @@ class ShadowrunCharacter:
                 non_hits = [r for r in dice if r < 5]
                 rerolled = [random.randint(1, 6) for _ in non_hits]
                 dice = [r for r in dice if r >= 5] + rerolled
+            
+            # Seal Fate - reroll any number of dice (here we reroll all non-hits and non-1s)
+            if seal_fate:
+                to_reroll = [r for r in dice if r < 5 and r != 1]
+                rerolled = [random.randint(1, 6) for _ in to_reroll]
+                dice = [r for r in dice if r >= 5 or r == 1] + rerolled
         
         hits = sum(1 for r in dice if r >= 5) + extra_hits + wild_die_hits
         ones = sum(1 for r in dice if r == 1)
@@ -401,6 +432,10 @@ class ShadowrunCharacter:
         
         glitch = ones > total_dice / 2
         critical_glitch = glitch and hits == 0
+        
+        # Apply Battle Hardened effect
+        if battle_hardened and "Defense" in self.roll_combo.get():
+            hits += self.attributes["Edge"]
         
         return {
             "dice": dice,
@@ -497,6 +532,23 @@ class ShadowrunCharacter:
             return True
         return False
     
+    def add_matrix_element(self, x, y, element_type, label=""):
+        """Add a matrix element at the specified position"""
+        self.matrix_grid[(x, y)] = {"type": element_type, "label": label}
+    
+    def remove_matrix_element(self, x, y):
+        """Remove matrix element at the specified position"""
+        if (x, y) in self.matrix_grid:
+            del self.matrix_grid[(x, y)]
+    
+    def get_matrix_element(self, x, y):
+        """Get matrix element at the specified position"""
+        return self.matrix_grid.get((x, y), None)
+    
+    def clear_matrix(self):
+        """Clear all matrix elements"""
+        self.matrix_grid = {}
+    
     def to_dict(self):
         return {
             "name": self.name,
@@ -523,6 +575,7 @@ class ShadowrunCharacter:
             "powers": self.powers,
             "complex_forms": self.complex_forms,
             "foci": self.foci,
+            "matrix_grid": self.matrix_grid,
             "physical_boxes": self.physical_boxes,
             "stun_boxes": self.stun_boxes,
             "initiative_score": self.initiative_score,
@@ -549,6 +602,10 @@ class ShadowrunCharacter:
         # Ensure reputation exists
         if not hasattr(self, 'reputation'):
             self.reputation = 0
+            
+        # Ensure matrix_grid exists
+        if not hasattr(self, 'matrix_grid'):
+            self.matrix_grid = {}
             
         self.calculate_derived_stats()
         return self
@@ -948,7 +1005,7 @@ class CharacterSheetApp:
         # Create tabs
         self.tabs = {}
         tab_names = ["Basic Info", "Skills", "Qualities", "Gear", 
-                    "Magic/Resonance", "Contacts", "Background", "Combat Stats", "Wiki"]
+                    "Magic/Resonance", "Contacts", "Background", "Combat Stats", "Wiki", "Matrix"]
         
         for name in tab_names:
             tab = ttk.Frame(self.notebook)
@@ -965,6 +1022,7 @@ class CharacterSheetApp:
         self.setup_background_tab()
         self.setup_combat_stats_tab()
         self.setup_wiki_tab()
+        self.setup_matrix_tab()
         
         # Load default character
         self.update_all_fields()
@@ -1276,16 +1334,25 @@ class CharacterSheetApp:
         for index in selected:
             quality = self.pos_quality_list.get(index)
             if quality not in self.character.qualities:
-                self.character.qualities.append(quality)
-                self.cur_quality_list.insert(tk.END, f"[+] {quality}")
-                self.update_derived_stats()
+                # Add karma cost if defined
+                karma_cost = ShadowrunCharacter.QUALITY_EFFECTS.get(quality, {}).get("karma", 0)
+                if self.character.karma >= karma_cost:
+                    self.character.qualities.append(quality)
+                    self.character.karma -= karma_cost
+                    self.cur_quality_list.insert(tk.END, f"[+] {quality}")
+                    self.update_derived_stats()
+                else:
+                    messagebox.showerror("Error", f"Not enough karma for {quality}! Cost: {karma_cost}")
     
     def add_neg_quality(self):
         selected = self.neg_quality_list.curselection()
         for index in selected:
             quality = self.neg_quality_list.get(index)
             if quality not in self.character.qualities:
+                # Add karma gain if defined (negative cost)
+                karma_gain = -ShadowrunCharacter.QUALITY_EFFECTS.get(quality, {}).get("karma", 0)
                 self.character.qualities.append(quality)
+                self.character.karma += karma_gain
                 self.cur_quality_list.insert(tk.END, f"[-] {quality}")
                 self.update_derived_stats()
     
@@ -1296,6 +1363,14 @@ class CharacterSheetApp:
             quality_str = self.cur_quality_list.get(index)
             quality = quality_str[4:]  # Remove [+] or [-]
             if quality in self.character.qualities:
+                # Reverse karma effect
+                if quality_str.startswith("[+]"):
+                    karma_cost = ShadowrunCharacter.QUALITY_EFFECTS.get(quality, {}).get("karma", 0)
+                    self.character.karma += karma_cost
+                else:
+                    karma_gain = -ShadowrunCharacter.QUALITY_EFFECTS.get(quality, {}).get("karma", 0)
+                    self.character.karma -= karma_gain
+                    
                 self.character.qualities.remove(quality)
             self.cur_quality_list.delete(index)
             self.update_derived_stats()
@@ -1867,7 +1942,13 @@ class CharacterSheetApp:
             return
             
         item = self.wiki_tree.item(selected[0])
-        category = item["text"]
+        item_text = item["text"]
+        parent = self.wiki_tree.parent(selected[0])
+        
+        # Get parent text if exists
+        parent_text = ""
+        if parent:
+            parent_text = self.wiki_tree.item(parent)["text"]
         
         # Wiki content data
         wiki_data = {
@@ -1936,7 +2017,16 @@ class CharacterSheetApp:
             content = f"**{name}**\n\nType: {focus.get('type', '')}\nForce: {focus.get('force', '')}\n\n{focus.get('description', '')}"
             wiki_data[name] = content
         
-        content = wiki_data.get(category, "No information available for this topic.")
+        # First try to get content by the exact item text
+        content = wiki_data.get(item_text, "")
+        
+        # If not found, try to get by parent text
+        if not content and parent_text:
+            content = wiki_data.get(parent_text, "")
+        
+        # If still not found, show default message
+        if not content:
+            content = "No information available for this topic."
         
         # Format as markdown-like text
         formatted_content = ""
@@ -1948,7 +2038,7 @@ class CharacterSheetApp:
         
         self.wiki_content.config(state=tk.NORMAL)
         self.wiki_content.delete(1.0, tk.END)
-        self.wiki_content.insert(tk.END, f"=== {category} ===\n\n{formatted_content}")
+        self.wiki_content.insert(tk.END, f"=== {item_text} ===\n\n{formatted_content}")
         self.wiki_content.config(state=tk.DISABLED)
     
     def setup_combat_stats_tab(self):
@@ -2507,6 +2597,155 @@ class CharacterSheetApp:
         self.edge_label.config(text=str(self.character.current_edge))
         messagebox.showinfo("Edge Reset", "Edge points reset to maximum!")
     
+    def setup_matrix_tab(self):
+        tab = self.tabs["Matrix"]
+        
+        # Create main frames
+        left_frame = ttk.Frame(tab)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, padx=10, pady=5)
+        
+        right_frame = ttk.Frame(tab)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Matrix element selection
+        element_frame = ttk.LabelFrame(left_frame, text="Matrix Elements")
+        element_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.selected_element = tk.StringVar()
+        self.selected_element.set("Player")
+        
+        for element in ShadowrunCharacter.MATRIX_ICONS:
+            rb = ttk.Radiobutton(
+                element_frame, 
+                text=element, 
+                variable=self.selected_element,
+                value=element
+            )
+            rb.pack(anchor=tk.W, padx=5, pady=2)
+        
+        # Element label
+        ttk.Label(element_frame, text="Label:").pack(anchor=tk.W, padx=5, pady=2)
+        self.element_label_entry = ttk.Entry(element_frame, width=20)
+        self.element_label_entry.pack(fill=tk.X, padx=5, pady=2)
+        
+        # Matrix controls
+        ctrl_frame = ttk.LabelFrame(left_frame, text="Controls")
+        ctrl_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Button(ctrl_frame, text="Clear Matrix", command=self.clear_matrix).pack(fill=tk.X, padx=5, pady=2)
+        ttk.Button(ctrl_frame, text="Save Matrix", command=self.save_matrix).pack(fill=tk.X, padx=5, pady=2)
+        ttk.Button(ctrl_frame, text="Load Matrix", command=self.load_matrix).pack(fill=tk.X, padx=5, pady=2)
+        
+        # Matrix grid
+        grid_frame = ttk.LabelFrame(right_frame, text="Matrix Grid")
+        grid_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Create canvas with scrollbars
+        self.canvas = tk.Canvas(grid_frame, bg="#1c1c1c", width=600, height=400)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Add scrollbars
+        v_scroll = ttk.Scrollbar(grid_frame, orient=tk.VERTICAL, command=self.canvas.yview)
+        v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        h_scroll = ttk.Scrollbar(grid_frame, orient=tk.HORIZONTAL, command=self.canvas.xview)
+        h_scroll.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        self.canvas.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
+        
+        # Bind canvas click
+        self.canvas.bind("<Button-1>", self.canvas_click)
+        
+        # Draw grid
+        self.draw_matrix_grid()
+    
+    def draw_matrix_grid(self):
+        """Draw the matrix grid with existing elements"""
+        self.canvas.delete("all")
+        
+        # Draw grid lines
+        cell_size = 50
+        for i in range(0, 601, cell_size):
+            self.canvas.create_line(i, 0, i, 400, fill="#333")
+        for j in range(0, 401, cell_size):
+            self.canvas.create_line(0, j, 600, j, fill="#333")
+            
+        # Draw existing matrix elements
+        for (x, y), element in self.character.matrix_grid.items():
+            self.draw_matrix_element(x, y, element["type"], element["label"])
+    
+    def draw_matrix_element(self, x, y, element_type, label=""):
+        """Draw a matrix element at the specified position"""
+        colors = {
+            "Player": "#4F9BFF",  # Blue
+            "Enemy": "#F44336",   # Red
+            "Device": "#FFEB3B",  # Yellow
+            "Barrier": "#000000", # Black
+            "Data": "#4CAF50",    # Green
+            "IC": "#FF9800",      # Orange
+            "Node": "#9C27B0",    # Purple
+            "Host": "#00BCD4"     # Cyan
+        }
+        
+        size = 40
+        x_pixel = x * 50 + 5
+        y_pixel = y * 50 + 5
+        
+        # Draw element
+        self.canvas.create_oval(
+            x_pixel, y_pixel, 
+            x_pixel + size, y_pixel + size,
+            fill=colors.get(element_type, "#888"),
+            outline="#666"
+        )
+        
+        # Draw label
+        self.canvas.create_text(
+            x_pixel + size/2, y_pixel + size/2,
+            text=label or element_type[0],
+            fill="white",
+            font=("Arial", 10, "bold")
+        )
+    
+    def canvas_click(self, event):
+        """Handle click on matrix canvas"""
+        cell_size = 50
+        x = event.x // cell_size
+        y = event.y // cell_size
+        
+        element_type = self.selected_element.get()
+        label = self.element_label_entry.get().strip()
+        
+        # Add or update element
+        self.character.add_matrix_element(x, y, element_type, label)
+        
+        # Redraw grid
+        self.draw_matrix_grid()
+    
+    def clear_matrix(self):
+        """Clear the matrix grid"""
+        self.character.clear_matrix()
+        self.draw_matrix_grid()
+    
+    def save_matrix(self):
+        """Save matrix state to file"""
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        if file_path:
+            with open(file_path, 'w') as f:
+                json.dump(self.character.matrix_grid, f)
+    
+    def load_matrix(self):
+        """Load matrix state from file"""
+        file_path = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        if file_path:
+            with open(file_path, 'r') as f:
+                self.character.matrix_grid = json.load(f)
+            self.draw_matrix_grid()
+    
     def update_all_fields(self):
         # Basic Info
         self.name_entry.delete(0, tk.END)
@@ -2606,6 +2845,9 @@ class CharacterSheetApp:
         # Background
         self.background_text.delete(1.0, tk.END)
         self.background_text.insert(tk.END, self.character.background)
+        
+        # Matrix
+        self.draw_matrix_grid()
         
         # Update derived stats display
         self.update_derived_stats()
