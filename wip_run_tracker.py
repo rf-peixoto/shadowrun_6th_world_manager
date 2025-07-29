@@ -1,5 +1,3 @@
-# run_tracker.py
-
 import json
 import os
 import tkinter as tk
