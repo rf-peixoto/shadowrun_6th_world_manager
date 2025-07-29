@@ -248,13 +248,55 @@ class RunTrackerApp:
         self.run_tree.pack(fill="both", expand=True)
         self.run_tree.bind("<<TreeviewSelect>>", self._on_run_select)
 
-        # Right panel: Run details
+        # Right panel: Notebook for Run details and Marketplace
         right_frame = tk.Frame(self.root, bg=BG_COLOR)
         right_frame.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
         right_frame.columnconfigure(0, weight=1)
-        tk.Label(right_frame, text="Run Details", bg=BG_COLOR, fg=FG_COLOR, font=("Arial", 12, "bold")).grid(row=0, column=0, sticky="w", padx=5, pady=(0,5))
+        right_frame.rowconfigure(0, weight=1)
+        
+        # Create notebook for right panel
+        self.right_notebook = ttk.Notebook(right_frame)
+        self.right_notebook.grid(row=0, column=0, sticky="nsew")
+        
+        # Run details tab
+        self.run_details_frame = tk.Frame(self.right_notebook, bg=BG_COLOR)
+        self.right_notebook.add(self.run_details_frame, text="Run Details")
+        
+        # Marketplace tab
+        self.marketplace_frame = tk.Frame(self.right_notebook, bg=BG_COLOR)
+        self.right_notebook.add(self.marketplace_frame, text="Marketplace")
+        
+        # Populate run details frame
+        self._setup_run_details()
+        # Populate marketplace frame
+        self._setup_marketplace()
 
-        detail_frame = tk.Frame(right_frame, bg=BG_COLOR)
+        # Bottom action buttons
+        bottom_btns = tk.Frame(self.root, bg=BG_COLOR)
+        bottom_btns.grid(row=2, column=0, columnspan=2, pady=10)
+        self.complete_btn = tk.Button(
+            bottom_btns, text="Complete Run", command=self.complete_run, state="disabled",
+            width=20,
+            bg=BUTTON_BG, fg=BUTTON_FG,
+            activebackground=BUTTON_ACTIVE_BG, activeforeground=BUTTON_ACTIVE_FG
+        )
+        self.complete_btn.pack(side="left", padx=50)
+        self.abandon_btn = tk.Button(
+            bottom_btns, text="Abandon Run", command=self.abandon_run, state="disabled",
+            width=20,
+            bg=BUTTON_BG, fg=BUTTON_FG,
+            activebackground=BUTTON_ACTIVE_BG, activeforeground=BUTTON_ACTIVE_FG
+        )
+        self.abandon_btn.pack(side="left", padx=50)
+
+        # Initial population
+        self.update_run_list()
+
+    def _setup_run_details(self):
+        """Setup the run details tab"""
+        tk.Label(self.run_details_frame, text="Run Details", bg=BG_COLOR, fg=FG_COLOR, font=("Arial", 12, "bold")).grid(row=0, column=0, sticky="w", padx=5, pady=(0,5))
+
+        detail_frame = tk.Frame(self.run_details_frame, bg=BG_COLOR)
         detail_frame.grid(row=1, column=0, sticky="nsew")
 
         # Header: Name & Status
@@ -270,7 +312,7 @@ class RunTrackerApp:
         # Progress
         prog = tk.Frame(detail_frame, bg=BG_COLOR)
         prog.pack(fill="x", padx=5, pady=5)
-        tk.Label(prog, text="Progress:", bg=BG_COLOR, fg=FG_COLOR).pack(side="left")
+        tk.Label(prog, text="Progress:").pack(side="left")
         self.progress_var = tk.DoubleVar()
         self.progress_bar = ttk.Progressbar(prog, variable=self.progress_var, maximum=100, length=200, style="TProgressbar")
         self.progress_bar.pack(side="left", padx=5)
@@ -310,26 +352,125 @@ class RunTrackerApp:
         self.detail_char = tk.Label(rc, text="None", bg=BG_COLOR, fg=FG_COLOR)
         self.detail_char.grid(row=0, column=3, sticky="w", padx=5)
 
-        # Bottom action buttons
-        bottom_btns = tk.Frame(self.root, bg=BG_COLOR)
-        bottom_btns.grid(row=2, column=0, columnspan=2, pady=10)
-        self.complete_btn = tk.Button(
-            bottom_btns, text="Complete Run", command=self.complete_run, state="disabled",
-            width=20,
+    def _setup_marketplace(self):
+        """Setup the marketplace tab"""
+        # Available items
+        self.marketplace_items = [
+            {"name": "Medkit (Rating 1)", "price": 500, "category": "Medkits", "gear_data": {"name": "Medkit (Rating 1)", "Rating": "1", "Type": "Medkit"}},
+            {"name": "Medkit (Rating 3)", "price": 1000, "category": "Medkits", "gear_data": {"name": "Medkit (Rating 3)", "Rating": "3", "Type": "Medkit"}},
+            {"name": "Medkit (Rating 6)", "price": 2000, "category": "Medkits", "gear_data": {"name": "Medkit (Rating 6)", "Rating": "6", "Type": "Medkit"}},
+            {"name": "Fragmentation Grenade", "price": 500, "category": "Grenades", "gear_data": {"name": "Fragmentation Grenade", "Type": "Grenade", "Damage": "10P", "Blast Radius": "10m"}},
+            {"name": "Smoke Grenade", "price": 250, "category": "Grenades", "gear_data": {"name": "Smoke Grenade", "Type": "Grenade", "Effect": "Smoke Screen", "Duration": "1 minute"}},
+            {"name": "Ammo: Light Pistol (50 rounds)", "price": 100, "category": "Ammo", "gear_data": {"name": "Light Pistol Ammo", "Caliber": "Light Pistol", "Quantity": "50"}},
+            {"name": "Ammo: Heavy Pistol (50 rounds)", "price": 150, "category": "Ammo", "gear_data": {"name": "Heavy Pistol Ammo", "Caliber": "Heavy Pistol", "Quantity": "50"}},
+            {"name": "Ammo: Assault Rifle (50 rounds)", "price": 250, "category": "Ammo", "gear_data": {"name": "Assault Rifle Ammo", "Caliber": "Assault Rifle", "Quantity": "50"}},
+        ]
+        
+        # Title
+        tk.Label(self.marketplace_frame, text="Shadowrun Marketplace", bg=BG_COLOR, fg=FG_COLOR, font=("Arial", 12, "bold")).grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        
+        # Items treeview
+        tree_frame = tk.Frame(self.marketplace_frame, bg=BG_COLOR)
+        tree_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        
+        columns = ("Item", "Price", "Category")
+        self.market_tree = ttk.Treeview(
+            tree_frame, columns=columns, show="headings", height=10
+        )
+        self.market_tree.heading("Item", text="Item")
+        self.market_tree.heading("Price", text="Price (¥)")
+        self.market_tree.heading("Category", text="Category")
+        self.market_tree.column("Item", width=250)
+        self.market_tree.column("Price", width=100)
+        self.market_tree.column("Category", width=150)
+        
+        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.market_tree.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.market_tree.configure(yscrollcommand=scrollbar.set)
+        self.market_tree.pack(side="left", fill="both", expand=True)
+        
+        # Populate items
+        for item in self.marketplace_items:
+            self.market_tree.insert("", "end", values=(item["name"], f"{item['price']}¥", item["category"]))
+        
+        # Buy button
+        btn_frame = tk.Frame(self.marketplace_frame, bg=BG_COLOR)
+        btn_frame.grid(row=2, column=0, sticky="e", padx=5, pady=5)
+        
+        self.buy_btn = tk.Button(
+            btn_frame, text="Buy Selected Item", command=self.buy_item, state="disabled",
             bg=BUTTON_BG, fg=BUTTON_FG,
             activebackground=BUTTON_ACTIVE_BG, activeforeground=BUTTON_ACTIVE_FG
         )
-        self.complete_btn.pack(side="left", padx=50)
-        self.abandon_btn = tk.Button(
-            bottom_btns, text="Abandon Run", command=self.abandon_run, state="disabled",
-            width=20,
-            bg=BUTTON_BG, fg=BUTTON_FG,
-            activebackground=BUTTON_ACTIVE_BG, activeforeground=BUTTON_ACTIVE_FG
+        self.buy_btn.pack(side="right")
+        
+        # Info label
+        self.market_info = tk.Label(
+            self.marketplace_frame, text="Load a character to buy items", 
+            bg=BG_COLOR, fg=FG_COLOR, font=("Arial", 10)
         )
-        self.abandon_btn.pack(side="left", padx=50)
+        self.market_info.grid(row=3, column=0, sticky="w", padx=5, pady=5)
+        
+        # Bind selection event
+        self.market_tree.bind("<<TreeviewSelect>>", self._on_market_select)
 
-        # Initial population
-        self.update_run_list()
+    def _on_market_select(self, event):
+        """Enable buy button when an item is selected and character is loaded"""
+        if self.current_character and self.market_tree.selection():
+            self.buy_btn.config(state="normal")
+        else:
+            self.buy_btn.config(state="disabled")
+
+    def buy_item(self):
+        """Handle item purchase"""
+        selected = self.market_tree.selection()
+        if not selected or not self.current_character:
+            return
+            
+        # Get selected item
+        item_index = self.market_tree.index(selected[0])
+        item = self.marketplace_items[item_index]
+        
+        # Check character nuyen
+        if self.current_character["nuyen"] < item["price"]:
+            messagebox.showwarning("Insufficient Funds", f"You need {item['price']}¥ but only have {self.current_character['nuyen']}¥")
+            return
+            
+        # Confirm purchase
+        if not messagebox.askyesno("Confirm Purchase", f"Buy {item['name']} for {item['price']}¥?"):
+            return
+            
+        try:
+            # Update character file
+            with open(self.current_character["file"], "r") as f:
+                char_data = json.load(f)
+            
+            # Update nuyen
+            char_data["nuyen"] = char_data.get("nuyen", 0) - item["price"]
+            
+            # Add item to gear
+            category = item["category"]
+            if "gear" not in char_data:
+                char_data["gear"] = {}
+            if category not in char_data["gear"]:
+                char_data["gear"][category] = []
+                
+            char_data["gear"][category].append(item["gear_data"])
+            
+            # Save character
+            with open(self.current_character["file"], "w") as f:
+                json.dump(char_data, f, indent=2)
+            
+            # Update current character
+            self.current_character["nuyen"] = char_data["nuyen"]
+            
+            # Update UI
+            self.char_label.config(text=f"Character: {self.current_character['name']} ({self.current_character['nuyen']}¥)")
+            self.market_info.config(text=f"Purchased {item['name']} for {item['price']}¥")
+            messagebox.showinfo("Purchase Complete", f"You bought {item['name']} for {item['price']}¥")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to complete purchase: {str(e)}")
 
     def new_run(self):
         dlg = RunDialog(self.root)
@@ -518,6 +659,11 @@ class RunTrackerApp:
                 self.char_label.config(text=f"Character: {char_lbl}")
                 self.detail_char.config(text=char_lbl)
                 self.update_complete_button_state()
+                
+                # Enable marketplace if items are selected
+                if self.market_tree.selection():
+                    self.buy_btn.config(state="normal")
+                self.market_info.config(text="Select an item to purchase")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to load character: {e}")
 
@@ -527,6 +673,8 @@ class RunTrackerApp:
         if self.current_run and self.current_run.character_name == "":
             self.detail_char.config(text="None")
         self.update_complete_button_state()
+        self.buy_btn.config(state="disabled")
+        self.market_info.config(text="Load a character to buy items")
 
     def complete_run(self):
         run = self.current_run
