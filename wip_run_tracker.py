@@ -1,3 +1,5 @@
+# run_tracker.py
+
 import json
 import os
 import tkinter as tk
@@ -359,11 +361,11 @@ class RunTrackerApp:
             {"name": "Medkit (Rating 1)", "price": 500, "category": "Medkits", "gear_data": {"name": "Medkit (Rating 1)", "Rating": "1", "Type": "Medkit"}},
             {"name": "Medkit (Rating 3)", "price": 1000, "category": "Medkits", "gear_data": {"name": "Medkit (Rating 3)", "Rating": "3", "Type": "Medkit"}},
             {"name": "Medkit (Rating 6)", "price": 2000, "category": "Medkits", "gear_data": {"name": "Medkit (Rating 6)", "Rating": "6", "Type": "Medkit"}},
-            {"name": "Fragmentation Grenade", "price": 500, "category": "Grenades", "gear_data": {"name": "Fragmentation Grenade", "Type": "Grenade", "Damage": "10P", "Blast Radius": "10m"}},
-            {"name": "Smoke Grenade", "price": 250, "category": "Grenades", "gear_data": {"name": "Smoke Grenade", "Type": "Grenade", "Effect": "Smoke Screen", "Duration": "1 minute"}},
-            {"name": "Ammo: Light Pistol (50 rounds)", "price": 100, "category": "Ammo", "gear_data": {"name": "Light Pistol Ammo", "Caliber": "Light Pistol", "Quantity": "50"}},
-            {"name": "Ammo: Heavy Pistol (50 rounds)", "price": 150, "category": "Ammo", "gear_data": {"name": "Heavy Pistol Ammo", "Caliber": "Heavy Pistol", "Quantity": "50"}},
-            {"name": "Ammo: Assault Rifle (50 rounds)", "price": 250, "category": "Ammo", "gear_data": {"name": "Assault Rifle Ammo", "Caliber": "Assault Rifle", "Quantity": "50"}},
+            #{"name": "Fragmentation Grenade", "price": 500, "category": "Grenades", "gear_data": {"name": "Fragmentation Grenade", "Type": "Grenade", "Damage": "10P", "Blast Radius": "10m"}},
+            #{"name": "Smoke Grenade", "price": 250, "category": "Grenades", "gear_data": {"name": "Smoke Grenade", "Type": "Grenade", "Effect": "Smoke Screen", "Duration": "1 minute"}},
+            #{"name": "Ammo: Light Pistol (50 rounds)", "price": 100, "category": "Ammo", "gear_data": {"name": "Light Pistol Ammo", "Caliber": "Light Pistol", "Quantity": "50"}},
+            #{"name": "Ammo: Heavy Pistol (50 rounds)", "price": 150, "category": "Ammo", "gear_data": {"name": "Heavy Pistol Ammo", "Caliber": "Heavy Pistol", "Quantity": "50"}},
+            #{"name": "Ammo: Assault Rifle (50 rounds)", "price": 250, "category": "Other", "gear_data": {"name": "Assault Rifle Ammo", "Caliber": "Assault Rifle", "Quantity": "50"}},
         ]
         
         # Title
