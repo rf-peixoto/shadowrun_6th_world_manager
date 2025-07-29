@@ -1,6 +1,6 @@
 ![Shadowrun 6th World Logo](https://www.shadowrunsixthworld.com/wp-content/themes/shadowrun/dist/images/shadowrun-logo-totem_bc47c041.png)
 
-##### A set of scripts to manage your character sheet. The run_tracker file is a "runs" (or missions) manager so you don't need to write it by hand. I must let you know that bugs are everywhere. Use it *as is*. Want to contribute? Tip me some sats at the address bellow:
+##### A set of scripts to manage your character sheet. The run_tracker file is a "runs" (or missions) manager and a marketplace for medkits. I must let you know that bugs are everywhere. Use it *as is*. Want to contribute? Tip me some sats at the address bellow:
 
 ```
 bc1q7e3mf5nwmjk9sw8thy35s9r7rq27ta7lzj0d7l
