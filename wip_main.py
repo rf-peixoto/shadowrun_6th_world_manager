@@ -91,7 +91,14 @@ class ShadowrunCharacter:
         "Addiction": {"karma": -8},
         "Allergy": {"karma": -10},
         "Bad Luck": {"karma": -12},
-        "Bad Rep": {"karma": -7}
+        "Bad Rep": {"karma": -7},
+        "Photographic Memory": {"Logic": 1, "karma": 6},
+        "Quick Healer": {"Body": 1, "karma": 8},
+        "Will to Live": {"karma": 6},
+        "Sensitive System": {"karma": -12},
+        "Simsense Vertigo": {"karma": -10},
+        "Social Stress": {"karma": -8},
+        "Spirit Bane": {"karma": -9}
     }
     
     GEAR_CATEGORIES = ["Weapons", "Armor", "Cyberware", "Bioware", "Magic Items", "Electronics", "Medkits", "Other"]
@@ -196,18 +203,6 @@ class ShadowrunCharacter:
         "Hack Device", "Pilot Vehicle", "Full Defense", "Overwatch"
     ]
     
-    # Matrix icons
-    MATRIX_ICONS = {
-        "Player": "blue_circle",
-        "Enemy": "red_triangle",
-        "Device": "yellow_square",
-        "Barrier": "black_diamond",
-        "Data": "green_star",
-        "IC": "orange_hexagon",
-        "Node": "purple_circle",
-        "Host": "cyan_square"
-    }
-    
     def __init__(self):
         self.reset_character()
         
@@ -249,9 +244,6 @@ class ShadowrunCharacter:
         self.powers = []  # Now stored as dictionaries: {"name": "", "description": "", "activation": "", "effect": ""}
         self.complex_forms = []
         self.foci = []    # Now stored as dictionaries: {"name": "", "description": "", "type": "", "force": 0}
-        
-        # Matrix state
-        self.matrix_grid = {}  # Stores matrix elements: {(x, y): {"type": "", "label": ""}}
         
         # Combat stats
         self.physical_damage = 0
@@ -532,23 +524,6 @@ class ShadowrunCharacter:
             return True
         return False
     
-    def add_matrix_element(self, x, y, element_type, label=""):
-        """Add a matrix element at the specified position"""
-        self.matrix_grid[(x, y)] = {"type": element_type, "label": label}
-    
-    def remove_matrix_element(self, x, y):
-        """Remove matrix element at the specified position"""
-        if (x, y) in self.matrix_grid:
-            del self.matrix_grid[(x, y)]
-    
-    def get_matrix_element(self, x, y):
-        """Get matrix element at the specified position"""
-        return self.matrix_grid.get((x, y), None)
-    
-    def clear_matrix(self):
-        """Clear all matrix elements"""
-        self.matrix_grid = {}
-    
     def to_dict(self):
         return {
             "name": self.name,
@@ -575,7 +550,6 @@ class ShadowrunCharacter:
             "powers": self.powers,
             "complex_forms": self.complex_forms,
             "foci": self.foci,
-            "matrix_grid": self.matrix_grid,
             "physical_boxes": self.physical_boxes,
             "stun_boxes": self.stun_boxes,
             "initiative_score": self.initiative_score,
@@ -602,10 +576,6 @@ class ShadowrunCharacter:
         # Ensure reputation exists
         if not hasattr(self, 'reputation'):
             self.reputation = 0
-            
-        # Ensure matrix_grid exists
-        if not hasattr(self, 'matrix_grid'):
-            self.matrix_grid = {}
             
         self.calculate_derived_stats()
         return self
@@ -1005,7 +975,7 @@ class CharacterSheetApp:
         # Create tabs
         self.tabs = {}
         tab_names = ["Basic Info", "Skills", "Qualities", "Gear", 
-                    "Magic/Resonance", "Contacts", "Background", "Combat Stats", "Wiki", "Matrix"]
+                    "Magic/Resonance", "Contacts", "Background", "Combat Stats"]
         
         for name in tab_names:
             tab = ttk.Frame(self.notebook)
@@ -1021,8 +991,6 @@ class CharacterSheetApp:
         self.setup_contacts_tab()
         self.setup_background_tab()
         self.setup_combat_stats_tab()
-        self.setup_wiki_tab()
-        self.setup_matrix_tab()
         
         # Load default character
         self.update_all_fields()
@@ -1856,191 +1824,6 @@ class CharacterSheetApp:
         self.background_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.background_text.bind("<FocusOut>", self.update_derived_stats)
     
-    def setup_wiki_tab(self):
-        tab = self.tabs["Wiki"]
-        
-        # Create paned window for resizable panels
-        paned_window = ttk.PanedWindow(tab, orient=tk.HORIZONTAL)
-        paned_window.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Left panel - tree view with categories
-        tree_frame = ttk.Frame(paned_window, width=200)
-        paned_window.add(tree_frame, weight=1)
-        
-        # Wiki tree view
-        self.wiki_tree = ttk.Treeview(tree_frame, show="tree")
-        self.wiki_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # Populate wiki tree with categories
-        categories = {
-            "Gear": ShadowrunCharacter.GEAR_CATEGORIES,
-            "Magic": ["Spells", "Powers", "Foci", "Traditions"],
-            "Vehicles": ShadowrunCharacter.VEHICLE_TYPES,
-            "Actions": ["Minor Actions", "Major Actions"],
-            "Rules": ["Combat", "Magic System", "Hacking", "Vehicles"]
-        }
-        
-        self.wiki_items = {}
-        
-        for category, subcategories in categories.items():
-            parent = self.wiki_tree.insert("", "end", text=category, open=True)
-            for sub in subcategories:
-                item_id = self.wiki_tree.insert(parent, "end", text=sub)
-                self.wiki_items[sub] = item_id
-        
-        # Add specific items to gear categories
-        for category in ShadowrunCharacter.GEAR_CATEGORIES:
-            parent_id = self.wiki_items.get(category)
-            if parent_id:
-                for item in ShadowrunCharacter.PREDEFINED_GEAR.get(category, []):
-                    self.wiki_tree.insert(parent_id, "end", text=item["name"])
-        
-        # Add specific magic items
-        for spell in ShadowrunCharacter.PREDEFINED_SPELLS:
-            parent_id = self.wiki_items.get("Spells")
-            if parent_id:
-                self.wiki_tree.insert(parent_id, "end", text=spell["name"])
-                
-        for power in ShadowrunCharacter.PREDEFINED_POWERS:
-            parent_id = self.wiki_items.get("Powers")
-            if parent_id:
-                self.wiki_tree.insert(parent_id, "end", text=power["name"])
-                
-        for focus in ShadowrunCharacter.PREDEFINED_FOCI:
-            parent_id = self.wiki_items.get("Foci")
-            if parent_id:
-                self.wiki_tree.insert(parent_id, "end", text=focus["name"])
-        
-        # Add actions
-        minor_parent = self.wiki_items.get("Minor Actions")
-        if minor_parent:
-            for action in ShadowrunCharacter.MINOR_ACTIONS:
-                self.wiki_tree.insert(minor_parent, "end", text=action)
-                
-        major_parent = self.wiki_items.get("Major Actions")
-        if major_parent:
-            for action in ShadowrunCharacter.MAJOR_ACTIONS:
-                self.wiki_tree.insert(major_parent, "end", text=action)
-        
-        # Right panel - content display
-        content_frame = ttk.Frame(paned_window)
-        paned_window.add(content_frame, weight=3)
-        
-        # Wiki content display
-        self.wiki_content = scrolledtext.ScrolledText(
-            content_frame, wrap=tk.WORD, bg="#333", fg="#e0e0e0", 
-            font=("Arial", 10), state=tk.DISABLED
-        )
-        self.wiki_content.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # Bind tree selection to content display
-        self.wiki_tree.bind("<<TreeviewSelect>>", self.display_wiki_content)
-    
-    def display_wiki_content(self, event):
-        selected = self.wiki_tree.selection()
-        if not selected:
-            return
-            
-        item = self.wiki_tree.item(selected[0])
-        item_text = item["text"]
-        parent = self.wiki_tree.parent(selected[0])
-        
-        # Get parent text if exists
-        parent_text = ""
-        if parent:
-            parent_text = self.wiki_tree.item(parent)["text"]
-        
-        # Wiki content data
-        wiki_data = {
-            # Gear categories
-            "Weapons": "**Weapons**\n\nFirearms, blades, and other implements of destruction. Each weapon has:\n- Damage Value (DV)\n- Accuracy (ACC)\n- Armor Penetration (AP)\n- Mode (SA, BF, FA)\n- Recoil Compensation (RC)\n- Ammo Capacity\n\n**Special Rules**\n- Recoil affects burst fire\n- Smartgun systems add +2 ACC",
-            "Armor": "**Armor**\n\nProtective gear to reduce damage. Each armor has:\n- Rating (protection value)\n- Social penalty\n- Capacity for modifications\n\n**Special Rules**\n- Stacking armor has diminishing returns\n- Full body armor provides best protection but high social penalty",
-            "Cyberware": "**Cyberware**\n\nTechnological implants that enhance abilities but cost Essence. Each cyberware has:\n- Essence Cost\n- Capacity\n- Rating\n\n**Special Rules**\n- Essence loss affects magic users\n- Cyberlimbs can be customized",
-            "Bioware": "**Bioware**\n\nBiological enhancements that integrate with the body. Each bioware has:\n- Essence Cost\n- Rating\n- Capacity\n\n**Special Rules**\n- Lower essence cost than cyberware\n- More natural integration",
-            "Magic Items": "**Magic Items**\n\nItems with magical properties or that enhance magical abilities. Each item has:\n- Force\n- Type\n- Binding requirements\n\n**Special Rules**\n- Foci must be bound with karma\n- Sustaining foci reduce drain for sustained spells",
-            "Electronics": "**Electronics**\n\nDevices and gadgets for the digital age. Each item has:\n- Rating\n- Capacity\n- Function\n\n**Special Rules**\n- Device rating affects functionality\n- Commlinks for communication\n- Cyberdecks for hacking",
-            "Medkits": "**Medkits**\n\nMedical supplies for treating injuries. Each medkit has:\n- Rating (effectiveness)\n- Quantity (uses)\n\n**Special Rules**\n- Higher rating provides better healing\n- Each use consumes one charge",
-            "Other": "**Other Gear**\n\nMiscellaneous equipment for various purposes. Each item has:\n- Effect\n- Duration\n- Potency\n\n**Special Rules**\n- Includes tools, chemicals, and special items",
-            
-            # Magic categories
-            "Spells": "**Spells**\n\nMagical effects created through willpower and tradition. Each spell has:\n- Type (Combat, Health, Illusion, Manipulation)\n- Drain value (cost to cast)\n\n**Casting**\n- Spellcasting + Magic [Force] vs. Drain\n- Drain is Physical for combat spells, Stun for others",
-            "Powers": "**Adept Powers**\n\nInnate magical abilities possessed by adepts. Each power has:\n- Activation type (Passive, Simple Action)\n- Effect\n\n**Special Rules**\n- Powered by Magic attribute\n- No drain but limited by power points",
-            "Foci": "**Foci**\n\nMagical items that enhance or channel magic. Each focus has:\n- Type (Sustaining, Weapon, Spell, etc.)\n- Force (power level)\n\n**Special Rules**\n- Must be bound with karma\n- Can be overloaded or corrupted",
-            "Traditions": "**Magical Traditions**\n\nDifferent approaches to magic:\n- Hermetic (Logic-based)\n- Shamanic (Charisma-based)\n- Christian Theurgy (Willpower-based)\n- Buddhist (Intuition-based)\n\n**Special Rules**\n- Tradition determines drain resistance attribute\n- Affects spirit types that can be summoned",
-            
-            # Vehicle types
-            "Motorcycle": "**Motorcycle**\n\n- Speed: 4\n- Handling: 5\n- Accel: 3\n- Body: 8\n- Armor: 6\n- Pilot: 1\n- Sensor: 1\n- Seats: 2\n- Price: 15,000¥",
-            "Sedan": "**Sedan**\n\n- Speed: 3\n- Handling: 4\n- Accel: 2\n- Body: 12\n- Armor: 10\n- Pilot: 1\n- Sensor: 2\n- Seats: 4\n- Price: 25,000¥",
-            "Sports Car": "**Sports Car**\n\n- Speed: 5\n- Handling: 5\n- Accel: 4\n- Body: 10\n- Armor: 8\n- Pilot: 2\n- Sensor: 3\n- Seats: 2\n- Price: 75,000¥",
-            "Truck": "**Truck**\n\n- Speed: 2\n- Handling: 3\n- Accel: 1\n- Body: 18\n- Armor: 15\n- Pilot: 1\n- Sensor: 1\n- Seats: 3\n- Price: 40,000¥",
-            "Helicopter": "**Helicopter**\n\n- Speed: 4\n- Handling: 4\n- Accel: 2\n- Body: 14\n- Armor: 10\n- Pilot: 3\n- Sensor: 4\n- Seats: 6\n- Price: 200,000¥",
-            "Drone": "**Drone**\n\n- Speed: 3\n- Handling: 4\n- Accel: 2\n- Body: 6\n- Armor: 4\n- Pilot: 1\n- Sensor: 2\n- Seats: 0\n- Price: 10,000¥",
-            
-            # Actions
-            "Free Action": "**Free Action**\n\nCan be performed any time during your turn\n- Speak a few words\n- Drop an item\n- Change gun mode\n- Take a small step",
-            "Simple Action": "**Simple Action**\n\nRequires a simple action\n- Fire a weapon (simple)\n- Cast a spell\n- Make a skill test\n- Move up to walking speed",
-            "Interrupt Action": "**Interrupt Action**\n\nCan be performed outside your turn\n- Defensive actions\n- Dodging\n- Using Edge",
-            "Change Gun Mode": "**Change Gun Mode**\n\nSwitch between firing modes:\n- Single Shot (SS)\n- Semi-Automatic (SA)\n- Burst Fire (BF)\n- Full Automatic (FA)",
-            "Complex Action": "**Complex Action**\n\nRequires significant effort\n- Full attack\n- Complex spell casting\n- Hacking attempt\n- Reloading",
-            "Full Attack": "**Full Attack**\n\nUnleash a powerful attack\n- Add Edge to attack pool\n- Multiple attacks in one action\n- Requires complex action",
-            
-            # Rules
-            "Combat": "**Combat Sequence**\n1. Roll initiative\n2. Characters act in initiative order\n3. Repeat for each combat turn\n\n**Actions**\n- Simple Action (1 per turn)\n- Complex Action (1 per turn)\n- Free Action (multiple)",
-            "Magic System": "**Magic Rules**\n- Magic Rating determines spell power\n- Drain is physical/stun damage from spellcasting\n- Counterspelling defends against magic\n- Sustaining spells causes penalty",
-            "Hacking": "**Matrix Actions**\n- Brute Force (attack)\n- Hack on the Fly (stealth)\n- Matrix Perception (detection)\n\n**Devices**\n- All devices have device rating (1-6)",
-            "Vehicles": "**Vehicle Combat**\n- Piloting tests for maneuvers\n- Vehicle stats: Handling, Speed, Accel\n\n**Rigging**\n- Riggers can jump into vehicles directly"
-        }
-        
-        # Add content for specific items
-        for category in ShadowrunCharacter.GEAR_CATEGORIES:
-            for item in ShadowrunCharacter.PREDEFINED_GEAR.get(category, []):
-                name = item["name"]
-                content = f"**{name}**\n\n"
-                for key, value in item.items():
-                    if key != "name" and key != "Price":
-                        content += f"- {key}: {value}\n"
-                content += f"\nPrice: {item.get('Price', 'N/A')}¥"
-                wiki_data[name] = content
-                
-        for spell in ShadowrunCharacter.PREDEFINED_SPELLS:
-            name = spell["name"]
-            content = f"**{name}**\n\nType: {spell.get('type', '')}\nDrain: {spell.get('drain', '')}\n\n{spell.get('description', '')}"
-            wiki_data[name] = content
-            
-        for power in ShadowrunCharacter.PREDEFINED_POWERS:
-            name = power["name"]
-            content = f"**{name}**\n\nActivation: {power.get('activation', '')}\nEffect: {power.get('effect', '')}\n\n{power.get('description', '')}"
-            wiki_data[name] = content
-            
-        for focus in ShadowrunCharacter.PREDEFINED_FOCI:
-            name = focus["name"]
-            content = f"**{name}**\n\nType: {focus.get('type', '')}\nForce: {focus.get('force', '')}\n\n{focus.get('description', '')}"
-            wiki_data[name] = content
-        
-        # First try to get content by the exact item text
-        content = wiki_data.get(item_text, "")
-        
-        # If not found, try to get by parent text
-        if not content and parent_text:
-            content = wiki_data.get(parent_text, "")
-        
-        # If still not found, show default message
-        if not content:
-            content = "No information available for this topic."
-        
-        # Format as markdown-like text
-        formatted_content = ""
-        for line in content.split('\n'):
-            if line.startswith('**'):
-                formatted_content += "\n" + line + "\n"
-            else:
-                formatted_content += line + "\n"
-        
-        self.wiki_content.config(state=tk.NORMAL)
-        self.wiki_content.delete(1.0, tk.END)
-        self.wiki_content.insert(tk.END, f"=== {item_text} ===\n\n{formatted_content}")
-        self.wiki_content.config(state=tk.DISABLED)
-    
     def setup_combat_stats_tab(self):
         tab = self.tabs["Combat Stats"]
         notebook = ttk.Notebook(tab)
@@ -2597,155 +2380,6 @@ class CharacterSheetApp:
         self.edge_label.config(text=str(self.character.current_edge))
         messagebox.showinfo("Edge Reset", "Edge points reset to maximum!")
     
-    def setup_matrix_tab(self):
-        tab = self.tabs["Matrix"]
-        
-        # Create main frames
-        left_frame = ttk.Frame(tab)
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, padx=10, pady=5)
-        
-        right_frame = ttk.Frame(tab)
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        # Matrix element selection
-        element_frame = ttk.LabelFrame(left_frame, text="Matrix Elements")
-        element_frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        self.selected_element = tk.StringVar()
-        self.selected_element.set("Player")
-        
-        for element in ShadowrunCharacter.MATRIX_ICONS:
-            rb = ttk.Radiobutton(
-                element_frame, 
-                text=element, 
-                variable=self.selected_element,
-                value=element
-            )
-            rb.pack(anchor=tk.W, padx=5, pady=2)
-        
-        # Element label
-        ttk.Label(element_frame, text="Label:").pack(anchor=tk.W, padx=5, pady=2)
-        self.element_label_entry = ttk.Entry(element_frame, width=20)
-        self.element_label_entry.pack(fill=tk.X, padx=5, pady=2)
-        
-        # Matrix controls
-        ctrl_frame = ttk.LabelFrame(left_frame, text="Controls")
-        ctrl_frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        ttk.Button(ctrl_frame, text="Clear Matrix", command=self.clear_matrix).pack(fill=tk.X, padx=5, pady=2)
-        ttk.Button(ctrl_frame, text="Save Matrix", command=self.save_matrix).pack(fill=tk.X, padx=5, pady=2)
-        ttk.Button(ctrl_frame, text="Load Matrix", command=self.load_matrix).pack(fill=tk.X, padx=5, pady=2)
-        
-        # Matrix grid
-        grid_frame = ttk.LabelFrame(right_frame, text="Matrix Grid")
-        grid_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # Create canvas with scrollbars
-        self.canvas = tk.Canvas(grid_frame, bg="#1c1c1c", width=600, height=400)
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
-        # Add scrollbars
-        v_scroll = ttk.Scrollbar(grid_frame, orient=tk.VERTICAL, command=self.canvas.yview)
-        v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        h_scroll = ttk.Scrollbar(grid_frame, orient=tk.HORIZONTAL, command=self.canvas.xview)
-        h_scroll.pack(side=tk.BOTTOM, fill=tk.X)
-        
-        self.canvas.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
-        
-        # Bind canvas click
-        self.canvas.bind("<Button-1>", self.canvas_click)
-        
-        # Draw grid
-        self.draw_matrix_grid()
-    
-    def draw_matrix_grid(self):
-        """Draw the matrix grid with existing elements"""
-        self.canvas.delete("all")
-        
-        # Draw grid lines
-        cell_size = 50
-        for i in range(0, 601, cell_size):
-            self.canvas.create_line(i, 0, i, 400, fill="#333")
-        for j in range(0, 401, cell_size):
-            self.canvas.create_line(0, j, 600, j, fill="#333")
-            
-        # Draw existing matrix elements
-        for (x, y), element in self.character.matrix_grid.items():
-            self.draw_matrix_element(x, y, element["type"], element["label"])
-    
-    def draw_matrix_element(self, x, y, element_type, label=""):
-        """Draw a matrix element at the specified position"""
-        colors = {
-            "Player": "#4F9BFF",  # Blue
-            "Enemy": "#F44336",   # Red
-            "Device": "#FFEB3B",  # Yellow
-            "Barrier": "#000000", # Black
-            "Data": "#4CAF50",    # Green
-            "IC": "#FF9800",      # Orange
-            "Node": "#9C27B0",    # Purple
-            "Host": "#00BCD4"     # Cyan
-        }
-        
-        size = 40
-        x_pixel = x * 50 + 5
-        y_pixel = y * 50 + 5
-        
-        # Draw element
-        self.canvas.create_oval(
-            x_pixel, y_pixel, 
-            x_pixel + size, y_pixel + size,
-            fill=colors.get(element_type, "#888"),
-            outline="#666"
-        )
-        
-        # Draw label
-        self.canvas.create_text(
-            x_pixel + size/2, y_pixel + size/2,
-            text=label or element_type[0],
-            fill="white",
-            font=("Arial", 10, "bold")
-        )
-    
-    def canvas_click(self, event):
-        """Handle click on matrix canvas"""
-        cell_size = 50
-        x = event.x // cell_size
-        y = event.y // cell_size
-        
-        element_type = self.selected_element.get()
-        label = self.element_label_entry.get().strip()
-        
-        # Add or update element
-        self.character.add_matrix_element(x, y, element_type, label)
-        
-        # Redraw grid
-        self.draw_matrix_grid()
-    
-    def clear_matrix(self):
-        """Clear the matrix grid"""
-        self.character.clear_matrix()
-        self.draw_matrix_grid()
-    
-    def save_matrix(self):
-        """Save matrix state to file"""
-        file_path = filedialog.asksaveasfilename(
-            defaultextension=".json",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
-        )
-        if file_path:
-            with open(file_path, 'w') as f:
-                json.dump(self.character.matrix_grid, f)
-    
-    def load_matrix(self):
-        """Load matrix state from file"""
-        file_path = filedialog.askopenfilename(
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
-        )
-        if file_path:
-            with open(file_path, 'r') as f:
-                self.character.matrix_grid = json.load(f)
-            self.draw_matrix_grid()
-    
     def update_all_fields(self):
         # Basic Info
         self.name_entry.delete(0, tk.END)
@@ -2845,9 +2479,6 @@ class CharacterSheetApp:
         # Background
         self.background_text.delete(1.0, tk.END)
         self.background_text.insert(tk.END, self.character.background)
-        
-        # Matrix
-        self.draw_matrix_grid()
         
         # Update derived stats display
         self.update_derived_stats()
